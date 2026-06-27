@@ -33,7 +33,7 @@ export const runAIPipeline = async (imageUri) => {
     
     // 3. POST to Flask backend
     console.log('[AIOrchestrator] Sending request to Flask /analyze-image endpoint...');
-    const apiResponse = await fetch('http://localhost:5000/analyze-image', {
+    const apiResponse = await fetch("https://alokii.onrender.com/analyze-image", {
       method: 'POST',
       body: formData,
     });
