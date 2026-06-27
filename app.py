@@ -8,7 +8,7 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 
 # -----------------------------------------------------------------------------
-# DYNAMIC MODULE MOCK FOR inference_sdk (Supports Python 3.14+)
+# MOCK inference_sdk (for Python 3.14 compatibility)
 # -----------------------------------------------------------------------------
 mock_module = types.ModuleType("inference_sdk")
 
@@ -40,7 +40,7 @@ mock_module.InferenceHTTPClient = InferenceHTTPClient
 sys.modules["inference_sdk"] = mock_module
 
 # -----------------------------------------------------------------------------
-# FLASK BACKEND CONFIG & SETUP
+# FLASK SETUP
 # -----------------------------------------------------------------------------
 load_dotenv()
 
@@ -58,7 +58,19 @@ CLIENT = InferenceHTTPClient(
 
 THRESHOLD = 0.5
 
-# Helper function to run a single inference
+# -----------------------------------------------------------------------------
+# ROOT ROUTE (FIXES YOUR 404)
+# -----------------------------------------------------------------------------
+@app.route("/", methods=["GET"])
+def home():
+    return jsonify({
+        "status": "Backend is running 🚀",
+        "endpoint": "/analyze-image (POST)"
+    })
+
+# -----------------------------------------------------------------------------
+# HELPER
+# -----------------------------------------------------------------------------
 def run_model_inference(model_id, image_path):
     try:
         return CLIENT.infer(image_path, model_id=model_id)
@@ -70,7 +82,6 @@ def run_model_inference(model_id, image_path):
 # CORE LOGIC
 # -----------------------------------------------------------------------------
 def analyze_image(image_path):
-    # 1. Run BOTH models in parallel to optimize latency
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         future_pothole = executor.submit(run_model_inference, "pothole-detection-i00zy/2", image_path)
         future_garbage = executor.submit(run_model_inference, "garbage-can-overflow/1", image_path)
@@ -78,44 +89,36 @@ def analyze_image(image_path):
         pothole_result = future_pothole.result()
         garbage_result = future_garbage.result()
 
-    # 2. Extract highest confidence from each model (confidence = 0 if no predictions)
     pothole_predictions = pothole_result.get("predictions", [])
     pothole_confidence = max([p.get("confidence", 0) for p in pothole_predictions]) if pothole_predictions else 0.0
 
     garbage_predictions = garbage_result.get("predictions", [])
     garbage_confidence = max([g.get("confidence", 0) for g in garbage_predictions]) if garbage_predictions else 0.0
 
-    print(f"[Backend] Pothole max confidence: {pothole_confidence}")
-    print(f"[Backend] Garbage max confidence: {garbage_confidence}")
+    print(f"[Backend] Pothole confidence: {pothole_confidence}")
+    print(f"[Backend] Garbage confidence: {garbage_confidence}")
 
     max_confidence = max(pothole_confidence, garbage_confidence)
 
-    # 3. Apply safety threshold first
     if pothole_confidence < THRESHOLD and garbage_confidence < THRESHOLD:
         return {
             "label": "unknown",
-            "confidence": max_confidence,
-            "message": "Low confidence detection"
+            "confidence": max_confidence
         }
 
-    # 4. Compare results to select highest confidence label
     if pothole_confidence > garbage_confidence:
         return {
             "label": "pothole",
-            "confidence": pothole_confidence,
-            "model": "pothole-detection-i00zy/2",
-            "raw": pothole_result
+            "confidence": pothole_confidence
         }
     else:
         return {
             "label": "garbage_overflow",
-            "confidence": garbage_confidence,
-            "model": "garbage-can-overflow/1",
-            "raw": garbage_result
+            "confidence": garbage_confidence
         }
 
 # -----------------------------------------------------------------------------
-# ENDPOINT
+# API ENDPOINT
 # -----------------------------------------------------------------------------
 @app.route("/analyze-image", methods=["POST"])
 def analyze_image_endpoint():
@@ -123,30 +126,28 @@ def analyze_image_endpoint():
         return jsonify({"error": "No image file provided"}), 400
         
     file = request.files["image"]
+    
     if file.filename == "":
         return jsonify({"error": "No selected file"}), 400
         
-    # Save the file to a temporary location
-    temp_dir = tempfile.gettempdir()
-    temp_path = os.path.join(temp_dir, file.filename)
+    temp_path = os.path.join(tempfile.gettempdir(), file.filename)
     file.save(temp_path)
     
     try:
         result = analyze_image(temp_path)
         
-        # Clean up temp file
         if os.path.exists(temp_path):
             os.remove(temp_path)
             
-        # Return expected structured response
-        return jsonify({
-            "label": result["label"],
-            "confidence": float(result["confidence"])
-        })
+        return jsonify(result)
+        
     except Exception as e:
         if os.path.exists(temp_path):
             os.remove(temp_path)
         return jsonify({"error": str(e)}), 500
 
+# -----------------------------------------------------------------------------
+# LOCAL RUN (not used in Render)
+# -----------------------------------------------------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
