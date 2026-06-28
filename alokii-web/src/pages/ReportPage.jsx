@@ -189,16 +189,7 @@ export default function ReportPage() {
                   className="file-input-hidden"
                 />
               </label>
-              <label className="file-upload-label gallery-btn">
-                🖼️ Choose from Gallery
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageChange}
-                  disabled={submitting}
-                  className="file-input-hidden"
-                />
-              </label>
+
             </div>
           )}
         </div>
