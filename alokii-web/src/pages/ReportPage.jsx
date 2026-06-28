@@ -59,17 +59,34 @@ export default function ReportPage() {
         if (blob) {
           const file = new File([blob], `capture_${Date.now()}.jpg`, { type: blob.type });
           setImageFile(file);
-          setImagePreview(URL.createObjectURL(file));
+          setTempImagePreview(URL.createObjectURL(file));
         }
       }, 'image/jpeg');
     }
   };
+
+  const handleRetry = () => {
+    setTempImagePreview(null);
+    setImageFile(null);
+  };
+
+  const handleConfirm = () => {
+    setImagePreview(tempImagePreview);
+    setCameraActive(false);
+  };
+
+  const handleClose = () => {
+    setCameraActive(false);
+  };
+
   const [manualLat, setManualLat] = useState('');
   const [manualLng, setManualLng] = useState('');
 
-  // UI state
-  const [submitting, setSubmitting] = useState(false);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [tempImagePreview, setTempImagePreview] = useState(null);
+  // Removed unused showCamera state
   const [submitStep, setSubmitStep] = useState('');
+const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
   const { position, error: geoError, loading: geoLoading } = useGeolocation();
@@ -83,12 +100,7 @@ export default function ReportPage() {
     return null;
   };
 
-  const handleImageChange = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImageFile(file);
-    setImagePreview(URL.createObjectURL(file));
-  };
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -200,36 +212,44 @@ export default function ReportPage() {
           </label>
         </div>
 
-        {/* Section 2: Image */}
-        <div className="form-section">
-          <h3 className="section-title">2. Capture Evidence *</h3>
-          {/* Image Capture using live camera */}
-          <div className="camera-capture">
-            <video ref={videoRef} autoPlay playsInline muted className="camera-video" />
-            <canvas ref={canvasRef} style={{ display: 'none' }} />
-            <button
-              type="button"
-              className="capture-btn"
-              onClick={handleCapture}
-              disabled={submitting}
-            >
-              📸 Capture Photo
-            </button>
+          {/* Section 2: Image */}
+          <div className="form-section">
+            <h3 className="section-title">2. Capture Evidence *</h3>
+            {/* Open Camera button */}
+            {cameraActive ? (
+              <>
+                {/* Full‑screen overlay */}
+                <div className="camera-overlay">
+                  <video ref={videoRef} autoPlay playsInline muted className="camera-video" />
+                  <canvas ref={canvasRef} style={{ display: 'none' }} />
+                  <div className="camera-controls">
+                    <button type="button" className="capture-btn" onClick={handleCapture}>📸 Capture</button>
+                    <button type="button" className="retry-btn" onClick={handleRetry}>🔄 Retry</button>
+                    <button type="button" className="ok-btn" onClick={handleConfirm} disabled={!tempImagePreview}>✅ OK</button>
+                    <button type="button" className="close-btn" onClick={handleClose}>✖ Close</button>
+                  </div>
+                  {tempImagePreview && (
+                    <div className="temp-preview">
+                      <img src={tempImagePreview} alt="Temp" className="image-preview" />
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <button type="button" className="open-camera-btn" onClick={() => setCameraActive(true)} disabled={submitting}>
+                Open Camera
+              </button>
+            )}
+            {/* Show the confirmed image after OK */}
             {imagePreview && (
               <div className="image-preview-wrap">
                 <img src={imagePreview} alt="Preview" className="image-preview" />
-                <button
-                  type="button"
-                  className="remove-image-btn"
-                  onClick={() => { setImageFile(null); setImagePreview(null); }}
-                  disabled={submitting}
-                >
+                <button type="button" className="remove-image-btn" onClick={() => { setImageFile(null); setImagePreview(null); setCameraActive(false); }} disabled={submitting}>
                   ✕ Remove
                 </button>
               </div>
             )}
           </div>
-        </div>
 
         {/* Section 3: Issue Type */}
         <div className="form-section">

@@ -241,6 +241,60 @@
 .submit-btn:hover:not(:disabled) { background: #059669; }
 .submit-btn:disabled { opacity: 0.65; cursor: not-allowed; }
 
+/* Camera control buttons */
+.camera-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0,0,0,0.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.camera-controls {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.camera-controls button {
+  background: #10b981;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.camera-controls button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+.camera-controls button:active {
+  transform: translateY(1px);
+}
+
+  background: #10b981;
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  padding: 1rem;
+  font-size: 1rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.2s, opacity 0.2s;
+  box-shadow: 0 4px 16px rgba(16,185,129,0.25);
+}
+.submit-btn:hover:not(:disabled) { background: #059669; }
+.submit-btn:disabled { opacity: 0.65; cursor: not-allowed; }
+
 .admin-login-btn {
   position: fixed;
   bottom: 16px;
