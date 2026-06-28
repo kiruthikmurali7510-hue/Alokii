@@ -562,7 +562,7 @@ export default function DashboardPage() {
                     Back to Table view
                   </button>
                 </div>
-                <div className="flex-1 min-h-[450px] relative">
+                <div className="w-full h-[500px] relative">
                   <LeafletMap 
                     center={filteredReports.length ? [filteredReports[0].latitude, filteredReports[0].longitude] : [11.2719, 77.4120]}
                     zoom={13}
