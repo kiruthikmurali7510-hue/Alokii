@@ -12,6 +12,7 @@ export default function DashboardPage() {
   
   // Tabs
   const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'map', 'analytics'
+  const [mapStatsVisible, setMapStatsVisible] = useState(true);
   
   // Filtering & Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -24,6 +25,15 @@ export default function DashboardPage() {
   const itemsPerPage = 6;
 
   const navigate = useNavigate();
+
+  // Watch tab changes to collapse stats in map mode
+  useEffect(() => {
+    if (activeTab === 'map') {
+      setMapStatsVisible(false);
+    } else {
+      setMapStatsVisible(true);
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     if (sessionStorage.getItem('isAdminLoggedIn') !== 'true') {
@@ -219,45 +229,70 @@ export default function DashboardPage() {
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col p-6 md:p-10">
         
-        {/* Summary Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-surface border border-outline-variant p-6 rounded-2xl flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow">
-            <div className="w-12 h-12 bg-primary-container text-white rounded-xl flex items-center justify-center shadow-inner">
-              <span className="material-symbols-outlined">description</span>
+        {/* Summary Stats with Collapsible Behavior & Micro-animations */}
+        <div 
+          onClick={() => {
+            if (activeTab === 'map') {
+              setMapStatsVisible(false);
+            }
+          }}
+          title={activeTab === 'map' ? "Click to hide stats summary and focus map" : ""}
+          className={`relative group transition-all duration-500 ease-in-out overflow-hidden ${
+            activeTab === 'map' && !mapStatsVisible 
+              ? 'max-h-0 mb-0 opacity-0 pointer-events-none scale-95' 
+              : 'max-h-[400px] mb-8 opacity-100 scale-100'
+          } ${activeTab === 'map' ? 'cursor-pointer' : ''}`}
+        >
+          {activeTab === 'map' && mapStatsVisible && (
+            <div className="absolute top-2 right-4 bg-primary/10 text-primary text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity animate-pulse shadow-sm z-10">
+              <span className="material-symbols-outlined text-[12px]">visibility_off</span>
+              Click stats panel to hide
             </div>
-            <div>
-              <p className="text-xs text-on-surface-variant font-medium">Total Reports</p>
-              <h4 className="text-2xl font-bold text-on-surface">{totalCount}</h4>
-            </div>
-          </div>
+          )}
           
-          <div className="bg-surface border border-outline-variant p-6 rounded-2xl flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow">
-            <div className="w-12 h-12 bg-yellow-100 text-yellow-800 rounded-xl flex items-center justify-center">
-              <span className="material-symbols-outlined">pending_actions</span>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Total Reports */}
+            <div className="bg-surface border border-outline-variant p-6 rounded-2xl flex items-center gap-4 shadow-sm hover:shadow-md hover:-translate-y-1 hover:border-primary/20 hover:scale-[1.01] active:scale-[0.98] transition-all duration-300 ease-out">
+              <div className="w-12 h-12 bg-primary-container text-white rounded-xl flex items-center justify-center shadow-inner transition-transform duration-300 group-hover:scale-110">
+                <span className="material-symbols-outlined">description</span>
+              </div>
+              <div>
+                <p className="text-xs text-on-surface-variant font-medium">Total Reports</p>
+                <h4 className="text-2xl font-bold text-on-surface">{totalCount}</h4>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-on-surface-variant font-medium">Pending</p>
-              <h4 className="text-2xl font-bold text-on-surface">{pendingCount}</h4>
+            
+            {/* Pending */}
+            <div className="bg-surface border border-outline-variant p-6 rounded-2xl flex items-center gap-4 shadow-sm hover:shadow-md hover:-translate-y-1 hover:border-yellow-300 hover:scale-[1.01] active:scale-[0.98] transition-all duration-300 ease-out">
+              <div className="w-12 h-12 bg-yellow-100 text-yellow-800 rounded-xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
+                <span className="material-symbols-outlined">pending_actions</span>
+              </div>
+              <div>
+                <p className="text-xs text-on-surface-variant font-medium">Pending</p>
+                <h4 className="text-2xl font-bold text-on-surface">{pendingCount}</h4>
+              </div>
             </div>
-          </div>
-          
-          <div className="bg-surface border border-outline-variant p-6 rounded-2xl flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow">
-            <div className="w-12 h-12 bg-blue-100 text-blue-700 rounded-xl flex items-center justify-center">
-              <span className="material-symbols-outlined">engineering</span>
+            
+            {/* In Progress */}
+            <div className="bg-surface border border-outline-variant p-6 rounded-2xl flex items-center gap-4 shadow-sm hover:shadow-md hover:-translate-y-1 hover:border-blue-300 hover:scale-[1.01] active:scale-[0.98] transition-all duration-300 ease-out">
+              <div className="w-12 h-12 bg-blue-100 text-blue-700 rounded-xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
+                <span className="material-symbols-outlined">engineering</span>
+              </div>
+              <div>
+                <p className="text-xs text-on-surface-variant font-medium">In Progress</p>
+                <h4 className="text-2xl font-bold text-on-surface">{inProgressCount}</h4>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-on-surface-variant font-medium">In Progress</p>
-              <h4 className="text-2xl font-bold text-on-surface">{inProgressCount}</h4>
-            </div>
-          </div>
-          
-          <div className="bg-surface border border-outline-variant p-6 rounded-2xl flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow">
-            <div className="w-12 h-12 bg-green-100 text-green-700 rounded-xl flex items-center justify-center">
-              <span className="material-symbols-outlined">task_alt</span>
-            </div>
-            <div>
-              <p className="text-xs text-on-surface-variant font-medium">Resolved</p>
-              <h4 className="text-2xl font-bold text-on-surface">{resolvedCount}</h4>
+            
+            {/* Resolved */}
+            <div className="bg-surface border border-outline-variant p-6 rounded-2xl flex items-center gap-4 shadow-sm hover:shadow-md hover:-translate-y-1 hover:border-green-300 hover:scale-[1.01] active:scale-[0.98] transition-all duration-300 ease-out">
+              <div className="w-12 h-12 bg-green-100 text-green-700 rounded-xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
+                <span className="material-symbols-outlined">task_alt</span>
+              </div>
+              <div>
+                <p className="text-xs text-on-surface-variant font-medium">Resolved</p>
+                <h4 className="text-2xl font-bold text-on-surface">{resolvedCount}</h4>
+              </div>
             </div>
           </div>
         </div>
@@ -296,36 +331,108 @@ export default function DashboardPage() {
           <>
             {/* 1. Dashboard Tab */}
             {activeTab === 'dashboard' && (
-              <div className="flex flex-col xl:flex-row gap-8 items-start">
-                
-                {/* Main Table Container */}
-                <div className="flex-1 w-full bg-surface border border-outline-variant rounded-2xl overflow-hidden shadow-sm">
-                  <div className="p-6 border-b border-outline-variant flex items-center justify-between bg-white">
-                    <h2 className="text-lg font-bold text-on-background">Recent Submissions</h2>
-                    
-                    {/* Add new report button for mobile */}
-                    <button 
-                      className="md:hidden bg-primary text-white p-2 rounded-full shadow"
+              <div className="flex flex-col gap-4 w-full">
+
+                {/* ── Compact Filter Toolbar ── */}
+                <div className="bg-surface border border-outline-variant rounded-2xl p-4 shadow-sm flex flex-wrap items-end gap-3">
+                  
+                  {/* Category buttons */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] text-outline font-bold uppercase tracking-wider">Category</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {['All', 'Pothole', 'Streetlight', 'Garbage'].map((cat) => (
+                        <button
+                          key={cat}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                            selectedCategory === cat
+                              ? 'bg-primary text-white border-primary'
+                              : 'bg-white border-outline-variant text-on-surface-variant hover:bg-surface-container-high'
+                          }`}
+                          onClick={() => setSelectedCategory(cat)}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Status */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] text-outline font-bold uppercase tracking-wider">Status</label>
+                    <select
+                      className="bg-surface-container-low border border-outline-variant rounded-xl px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-primary font-medium"
+                      value={selectedStatus}
+                      onChange={(e) => setSelectedStatus(e.target.value)}
+                    >
+                      <option value="All">All Statuses</option>
+                      <option value="Pending">Pending</option>
+                      <option value="In Progress">In Progress</option>
+                      <option value="Resolved">Resolved</option>
+                    </select>
+                  </div>
+
+                  {/* Timeframe */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] text-outline font-bold uppercase tracking-wider">Timeframe</label>
+                    <select
+                      className="bg-surface-container-low border border-outline-variant rounded-xl px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-primary font-medium"
+                      value={selectedTimeframe}
+                      onChange={(e) => setSelectedTimeframe(e.target.value)}
+                    >
+                      <option value="All">All Time</option>
+                      <option value="24h">Last 24 Hours</option>
+                      <option value="7d">Last 7 Days</option>
+                      <option value="30d">Last 30 Days</option>
+                    </select>
+                  </div>
+
+                  {/* Reset */}
+                  <button
+                    className="px-4 py-1.5 text-primary font-bold text-xs border border-primary rounded-xl hover:bg-primary hover:text-white transition-all bg-white"
+                    onClick={resetFilters}
+                  >
+                    Reset Filters
+                  </button>
+
+                  {/* Spacer */}
+                  <div className="flex-1" />
+
+                  {/* Map Preview shortcut */}
+                  <button
+                    className="flex items-center gap-2 px-4 py-1.5 bg-surface-container-low border border-outline-variant rounded-xl text-xs font-bold text-on-surface hover:bg-primary hover:text-white hover:border-primary transition-all"
+                    onClick={() => setActiveTab('map')}
+                  >
+                    <span className="material-symbols-outlined text-[16px]">map</span>
+                    Open Map ({filteredReports.length})
+                  </button>
+                </div>
+
+                {/* ── Full-width Table ── */}
+                <div className="w-full bg-surface border border-outline-variant rounded-2xl overflow-hidden shadow-sm">
+                  <div className="px-4 py-3 border-b border-outline-variant flex items-center justify-between bg-white">
+                    <h2 className="text-base font-bold text-on-background">Recent Submissions</h2>
+                    <button
+                      className="md:hidden bg-primary text-white p-1.5 rounded-full shadow"
                       onClick={handleNewReport}
                     >
-                      <span className="material-symbols-outlined text-[20px] block">add</span>
+                      <span className="material-symbols-outlined text-[18px] block">add</span>
                     </button>
                   </div>
-                  
-                  {/* Table wrapper */}
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse whitespace-nowrap">
+
+                  {/* Table — no whitespace-nowrap, compact padding */}
+                  <div className="w-full overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="bg-surface-container-low border-b border-outline-variant">
-                          <th className="py-4 px-4 text-xs font-bold uppercase tracking-wider text-on-surface-variant">Timestamp</th>
-                          <th className="py-4 px-4 text-xs font-bold uppercase tracking-wider text-on-surface-variant">Evidence</th>
-                          <th className="py-4 px-4 text-xs font-bold uppercase tracking-wider text-on-surface-variant">Category</th>
-                          <th className="py-4 px-4 text-xs font-bold uppercase tracking-wider text-on-surface-variant">Reporter</th>
-                          <th className="py-4 px-4 text-xs font-bold uppercase tracking-wider text-on-surface-variant">Phone</th>
-                          <th className="py-4 px-4 text-xs font-bold uppercase tracking-wider text-on-surface-variant">AI Label</th>
-                          <th className="py-4 px-4 text-xs font-bold uppercase tracking-wider text-on-surface-variant">AI Confidence</th>
-                          <th className="py-4 px-4 text-xs font-bold uppercase tracking-wider text-on-surface-variant">Status</th>
-                          <th className="py-4 px-4 text-xs font-bold uppercase tracking-wider text-on-surface-variant">Action</th>
+                          <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant whitespace-nowrap">Timestamp</th>
+                          <th className="py-3 px-2 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Img</th>
+                          <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Category</th>
+                          <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Reporter</th>
+                          <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant whitespace-nowrap">Phone</th>
+                          <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant whitespace-nowrap">AI Label</th>
+                          <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant whitespace-nowrap">Confidence</th>
+                          <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Status</th>
+                          <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-outline-variant bg-white">
@@ -339,67 +446,75 @@ export default function DashboardPage() {
                           paginatedReports.map((r) => {
                             const style = getIssueStyle(r.issue_type);
                             return (
-                              <tr 
-                                key={r.id} 
+                              <tr
+                                key={r.id}
                                 className="hover:bg-blue-50/30 transition-colors cursor-pointer"
                                 onClick={() => setSelectedReport(r)}
                               >
-                                <td className="py-4 px-4 text-sm text-on-surface-variant">
+                                {/* Timestamp */}
+                                <td className="py-3 px-3 text-xs text-on-surface-variant whitespace-nowrap">
                                   {new Date(r.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
                                 </td>
-                                
-                                <td className="py-4 px-4">
-                                  <div className="w-12 h-12 rounded-lg bg-surface-container-highest overflow-hidden border border-outline-variant shadow-sm shrink-0">
+
+                                {/* Evidence thumbnail */}
+                                <td className="py-3 px-2">
+                                  <div className="w-9 h-9 rounded-lg bg-surface-container-highest overflow-hidden border border-outline-variant shrink-0">
                                     {r.image_url ? (
                                       <img alt={r.issue_type} className="w-full h-full object-cover" src={r.image_url} />
                                     ) : (
                                       <div className="w-full h-full flex items-center justify-center bg-gray-100 text-gray-400">
-                                        <span className="material-symbols-outlined">image</span>
+                                        <span className="material-symbols-outlined text-[16px]">image</span>
                                       </div>
                                     )}
                                   </div>
                                 </td>
 
-                                <td className="py-4 px-4">
-                                  <div className="flex items-center gap-3">
-                                    <div className={`w-8 h-8 ${style.colorClass} rounded-lg flex items-center justify-center shrink-0`}>
-                                      <span className="material-symbols-outlined text-[18px]">{style.icon}</span>
+                                {/* Category */}
+                                <td className="py-3 px-3">
+                                  <div className="flex items-center gap-2">
+                                    <div className={`w-6 h-6 ${style.colorClass} rounded-md flex items-center justify-center shrink-0`}>
+                                      <span className="material-symbols-outlined text-[14px]">{style.icon}</span>
                                     </div>
-                                    <span className="font-semibold text-sm text-on-surface">{r.issue_type || 'Other'}</span>
+                                    <span className="font-semibold text-xs text-on-surface">{r.issue_type || 'Other'}</span>
                                   </div>
                                 </td>
 
-                                <td className="py-4 px-4 text-sm text-on-surface font-medium">
+                                {/* Reporter */}
+                                <td className="py-3 px-3 text-xs text-on-surface font-medium max-w-[100px] truncate">
                                   {r.reporter_name || 'Anonymous'}
                                 </td>
 
-                                <td className="py-4 px-4 text-sm text-on-surface-variant">
+                                {/* Phone */}
+                                <td className="py-3 px-3 text-xs text-on-surface-variant whitespace-nowrap">
                                   {r.reporter_phone || '—'}
                                 </td>
 
-                                <td className="py-4 px-4 text-sm font-semibold text-on-surface font-medium">
+                                {/* AI Label */}
+                                <td className="py-3 px-3">
                                   {r.ai_label ? (
-                                    <span className="bg-primary/10 text-primary px-2.5 py-1 rounded-md text-xs font-bold">
+                                    <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-md text-[11px] font-bold whitespace-nowrap">
                                       {r.ai_label}
                                     </span>
                                   ) : (
-                                    <span className="text-gray-400 font-normal text-xs">Pending</span>
+                                    <span className="text-gray-400 text-[11px]">Pending</span>
                                   )}
                                 </td>
 
-                                <td className="py-4 px-4 text-sm font-mono text-on-surface-variant font-medium">
+                                {/* AI Confidence */}
+                                <td className="py-3 px-3">
                                   {r.ai_confidence ? (
-                                    <span className="bg-primary/10 text-primary px-2 py-0.5 rounded font-bold text-xs">
+                                    <span className="bg-primary/10 text-primary px-2 py-0.5 rounded font-bold text-[11px] font-mono whitespace-nowrap">
                                       {(r.ai_confidence * 100).toFixed(1)}%
                                     </span>
                                   ) : (
-                                    <span className="text-gray-400 font-normal text-xs">—</span>
+                                    <span className="text-gray-400 text-[11px]">—</span>
                                   )}
                                 </td>
 
-                                <td className="py-4 px-4" onClick={(e) => e.stopPropagation()}>
-                                  <select 
-                                    className={`border-none rounded-full px-3 py-1 font-bold text-xs cursor-pointer focus:ring-2 focus:ring-primary shadow-sm ${getStatusColor(r.status)}`}
+                                {/* Status */}
+                                <td className="py-3 px-3" onClick={(e) => e.stopPropagation()}>
+                                  <select
+                                    className={`border-none rounded-full px-2 py-1 font-bold text-[11px] cursor-pointer focus:ring-2 focus:ring-primary shadow-sm ${getStatusColor(r.status)}`}
                                     value={r.status || 'Pending'}
                                     onChange={(e) => handleStatusChange(r.id, e.target.value)}
                                   >
@@ -409,9 +524,10 @@ export default function DashboardPage() {
                                   </select>
                                 </td>
 
-                                <td className="py-4 px-4">
-                                  <button 
-                                    className="text-primary hover:text-on-primary-fixed-variant font-bold text-sm hover:underline"
+                                {/* Action */}
+                                <td className="py-3 px-3">
+                                  <button
+                                    className="text-primary hover:underline font-bold text-xs"
                                     onClick={() => setSelectedReport(r)}
                                   >
                                     Details
@@ -426,141 +542,35 @@ export default function DashboardPage() {
                   </div>
 
                   {/* Pagination footer */}
-                  <div className="p-4 border-t border-outline-variant flex items-center justify-between bg-surface-container-low">
+                  <div className="px-4 py-3 border-t border-outline-variant flex items-center justify-between bg-surface-container-low">
                     <span className="text-xs text-on-surface-variant font-semibold">
                       Showing {paginatedReports.length} of {totalFiltered} entries
                     </span>
                     <div className="flex items-center gap-2">
-                      <button 
+                      <button
                         className="p-1.5 border border-outline-variant rounded-lg bg-white hover:bg-surface-container-high transition-colors disabled:opacity-50"
                         onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                         disabled={currentPage === 1}
                       >
-                        <span className="material-symbols-outlined text-[20px] block">chevron_left</span>
+                        <span className="material-symbols-outlined text-[18px] block">chevron_left</span>
                       </button>
-                      <span className="text-xs font-bold px-3">
+                      <span className="text-xs font-bold px-2">
                         Page {currentPage} of {totalPages}
                       </span>
-                      <button 
+                      <button
                         className="p-1.5 border border-outline-variant rounded-lg bg-white hover:bg-surface-container-high transition-colors disabled:opacity-50"
                         onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                         disabled={currentPage === totalPages}
                       >
-                        <span className="material-symbols-outlined text-[20px] block">chevron_right</span>
+                        <span className="material-symbols-outlined text-[18px] block">chevron_right</span>
                       </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Sidebar Filter / Mini Map */}
-                <div className="w-full xl:w-80 flex flex-col gap-6">
-                  
-                  {/* Advanced Filters */}
-                  <div className="bg-surface border border-outline-variant rounded-2xl p-6 shadow-sm">
-                    <h3 className="text-md font-bold text-on-background mb-4 flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[20px] text-primary">tune</span>
-                      Advanced Filters
-                    </h3>
-                    
-                    <div className="flex flex-col gap-4">
-                      {/* Search Bar for Mobile/Tablet */}
-                      <div className="md:hidden">
-                        <label className="text-xs text-outline font-bold uppercase block mb-1.5">Search</label>
-                        <input 
-                          className="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary"
-                          placeholder="Search issues..."
-                          type="text"
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                      </div>
-
-                      {/* Category Buttons */}
-                      <div>
-                        <label className="text-xs text-outline font-bold uppercase block mb-2">Category</label>
-                        <div className="flex flex-wrap gap-2">
-                          {['All', 'Pothole', 'Streetlight', 'Garbage'].map((cat) => (
-                            <button
-                              key={cat}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
-                                selectedCategory === cat
-                                  ? 'bg-primary text-white border-primary'
-                                  : 'bg-white border-outline-variant text-on-surface-variant hover:bg-surface-container-high'
-                              }`}
-                              onClick={() => setSelectedCategory(cat)}
-                            >
-                              {cat}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Status Dropdown */}
-                      <div>
-                        <label className="text-xs text-outline font-bold uppercase block mb-1.5">Status</label>
-                        <select 
-                          className="w-full bg-surface-container-low border border-outline-variant rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary font-medium"
-                          value={selectedStatus}
-                          onChange={(e) => setSelectedStatus(e.target.value)}
-                        >
-                          <option value="All">All Statuses</option>
-                          <option value="Pending">Pending</option>
-                          <option value="In Progress">In Progress</option>
-                          <option value="Resolved">Resolved</option>
-                        </select>
-                      </div>
-
-                      {/* Timeframe Dropdown */}
-                      <div>
-                        <label className="text-xs text-outline font-bold uppercase block mb-1.5">Timeframe</label>
-                        <select 
-                          className="w-full bg-surface-container-low border border-outline-variant rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary font-medium"
-                          value={selectedTimeframe}
-                          onChange={(e) => setSelectedTimeframe(e.target.value)}
-                        >
-                          <option value="All">All Time</option>
-                          <option value="24h">Last 24 Hours</option>
-                          <option value="7d">Last 7 Days</option>
-                          <option value="30d">Last 30 Days</option>
-                        </select>
-                      </div>
-
-                      <button 
-                        className="mt-2 w-full py-2.5 text-primary font-bold text-xs border border-primary rounded-xl hover:bg-primary-container hover:text-white transition-all bg-white shadow-sm"
-                        onClick={resetFilters}
-                      >
-                        Reset Filters
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Map Preview Card */}
-                  <div 
-                    className="bg-surface border border-outline-variant rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
-                    onClick={() => setActiveTab('map')}
-                  >
-                    <div className="w-full h-32 rounded-xl overflow-hidden mb-3 relative bg-gray-100 border border-outline-variant">
-                      <div className="pointer-events-none absolute inset-0 z-10 bg-black/5 group-hover:bg-black/0 transition-all"></div>
-                      {/* Leaflet map inside sidebar */}
-                      <LeafletMap 
-                        center={reports.length ? [reports[0].latitude, reports[0].longitude] : [11.2719, 77.4120]}
-                        zoom={11}
-                        markers={reports}
-                        onMarkerClick={(report) => setSelectedReport(report)}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-bold text-sm text-on-surface">Interactive Map Preview</h4>
-                        <p className="text-xs text-on-surface-variant">{filteredReports.length} reports mapped</p>
-                      </div>
-                      <span className="material-symbols-outlined text-primary text-[20px] group-hover:translate-x-1 transition-transform">open_in_new</span>
                     </div>
                   </div>
                 </div>
 
               </div>
             )}
+
 
             {/* 2. Full Issue Map Tab */}
             {activeTab === 'map' && (
@@ -573,12 +583,23 @@ export default function DashboardPage() {
                     </h3>
                     <p className="text-xs text-on-surface-variant">Showing coordinates of all {filteredReports.length} filtered issues</p>
                   </div>
-                  <button 
-                    className="bg-primary text-white text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-on-primary-fixed-variant transition-colors"
-                    onClick={() => setActiveTab('dashboard')}
-                  >
-                    Back to Table view
-                  </button>
+                  <div className="flex items-center gap-3">
+                    {!mapStatsVisible && (
+                      <button 
+                        className="bg-white border border-outline-variant text-primary text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-primary hover:text-white transition-all hover:scale-105 active:scale-95 flex items-center gap-1.5"
+                        onClick={() => setMapStatsVisible(true)}
+                      >
+                        <span className="material-symbols-outlined text-[16px]">bar_chart</span>
+                        Show Stats
+                      </button>
+                    )}
+                    <button 
+                      className="bg-primary text-white text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-on-primary-fixed-variant transition-all hover:scale-105 active:scale-95"
+                      onClick={() => setActiveTab('dashboard')}
+                    >
+                      Back to Table view
+                    </button>
+                  </div>
                 </div>
                 <div className="w-full h-[500px] relative">
                   <LeafletMap 

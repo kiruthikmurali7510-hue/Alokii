@@ -117,9 +117,6 @@ export default function ReportPage() {
 
   return (
     <div className="report-page">
-      <button className="admin-login-btn" onClick={() => navigate('/login')}>
-        Login as Administrator
-      </button>
       <h2 className="report-title">Report Civic Issue</h2>
       <form className="report-form" onSubmit={handleSubmit} noValidate>
 
@@ -279,6 +276,13 @@ export default function ReportPage() {
           {submitting ? submitStep || 'Submitting…' : '🚀 Submit Report'}
         </button>
       </form>
+      <button 
+        className="admin-login-btn" 
+        onClick={() => navigate('/login')}
+        title="Admin Login"
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>admin_panel_settings</span>
+      </button>
     </div>
   );
 }
