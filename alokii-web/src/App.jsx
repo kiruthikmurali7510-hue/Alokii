@@ -1,12 +1,19 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import ReportPage from './pages/ReportPage';
 import SuccessPage from './pages/SuccessPage';
+import { warmUpBackend } from './services/api';
 import './App.css';
 
 function App() {
+  // Ping the backend as soon as the app loads so it's awake before the user submits
+  useEffect(() => {
+    warmUpBackend();
+  }, []);
+
   return (
     <BrowserRouter>
       <Routes>
