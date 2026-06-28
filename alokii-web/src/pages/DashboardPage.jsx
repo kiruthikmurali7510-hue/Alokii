@@ -184,7 +184,7 @@ export default function DashboardPage() {
             <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-on-primary shrink-0">
               <span className="material-symbols-outlined">location_city</span>
             </div>
-            <h1 className="text-xl text-primary font-extrabold tracking-tight">CivicConnect</h1>
+            <h1 className="text-xl text-primary font-extrabold tracking-tight">Tidy City</h1>
           </div>
           
           {/* Search bar */}
