@@ -4,7 +4,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import './LeafletMap.css';
 
-export default function LeafletMap({ center = [11.2719, 77.4120], zoom = 15, markers = [] }) {
+export default function LeafletMap({ center = [11.2719, 77.4120], zoom = 15, markers = [], onMarkerClick }) {
   const mapRef = useRef(null);
 
   useEffect(() => {
@@ -68,13 +68,18 @@ export default function LeafletMap({ center = [11.2719, 77.4120], zoom = 15, mar
 
           L.marker([m.latitude, m.longitude], { icon: customIcon })
             .addTo(markersGroup)
-            .bindPopup(`<strong>${m.issue_type || m.issueType || 'Issue'}</strong><br/>Reported by: ${m.reporter_name || m.name || 'Anonymous'}`);
+            .bindPopup(`<strong>${m.issue_type || m.issueType || 'Issue'}</strong><br/>Reported by: ${m.reporter_name || m.name || 'Anonymous'}`)
+            .on('click', () => {
+              if (onMarkerClick) {
+                onMarkerClick(m);
+              }
+            });
         }
       });
       markersGroup.addTo(map);
       map._reportMarkers = markersGroup;
     }
-  }, [center, zoom, markers]);
+  }, [center, zoom, markers, onMarkerClick]);
 
   return <div className="leaflet-container" ref={mapRef} />;
 }

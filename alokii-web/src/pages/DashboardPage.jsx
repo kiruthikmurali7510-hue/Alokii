@@ -529,6 +529,7 @@ export default function DashboardPage() {
                         center={reports.length ? [reports[0].latitude, reports[0].longitude] : [11.2719, 77.4120]}
                         zoom={11}
                         markers={reports}
+                        onMarkerClick={(report) => setSelectedReport(report)}
                       />
                     </div>
                     <div className="flex items-center justify-between">
@@ -567,6 +568,7 @@ export default function DashboardPage() {
                     center={filteredReports.length ? [filteredReports[0].latitude, filteredReports[0].longitude] : [11.2719, 77.4120]}
                     zoom={13}
                     markers={filteredReports}
+                    onMarkerClick={(report) => setSelectedReport(report)}
                   />
                 </div>
               </div>
