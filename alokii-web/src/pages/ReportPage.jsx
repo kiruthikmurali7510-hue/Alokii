@@ -180,16 +180,29 @@ export default function ReportPage() {
               </button>
             </div>
           ) : (
-            <label className="file-upload-label">
-              📷 Choose Image
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleImageChange}
-                disabled={submitting}
-                className="file-input-hidden"
-              />
-            </label>
+            <div className="upload-options">
+              <label className="file-upload-label camera-btn">
+                📸 Take Photo
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleImageChange}
+                  disabled={submitting}
+                  className="file-input-hidden"
+                />
+              </label>
+              <label className="file-upload-label gallery-btn">
+                🖼️ Choose from Gallery
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  disabled={submitting}
+                  className="file-input-hidden"
+                />
+              </label>
+            </div>
           )}
         </div>
 

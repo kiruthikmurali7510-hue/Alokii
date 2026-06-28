@@ -125,12 +125,13 @@
   background: #f8fafc;
   border: 2px dashed #cbd5e1;
   border-radius: 12px;
-  padding: 28px;
+  padding: 20px;
   font-size: 0.95rem;
   font-weight: 700;
   color: #475569;
   cursor: pointer;
   transition: border-color 0.2s, background 0.2s;
+  text-align: center;
 }
 .file-upload-label:hover {
   border-color: #10b981;
@@ -139,6 +140,11 @@
 }
 .file-input-hidden {
   display: none !important;
+}
+.upload-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
 /* Image preview */
