@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Alokii",
-    "slug": "Alokii",
+    "name": "Tidy City",
+    "slug": "Tidy-City",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -16,7 +16,7 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.anonymous.Alokii"
+      "package": "com.anonymous.TidyCity"
     },
     "web": {
       "favicon": "./assets/favicon.png"
