@@ -668,7 +668,7 @@ export default function DashboardPage() {
       {/* Detailed Report Modal */}
       {selectedReport && (
         <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4 transition-all duration-300"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-[9999] p-4 transition-all duration-300"
           onClick={() => setSelectedReport(null)}
         >
           <div 
