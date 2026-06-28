@@ -322,7 +322,8 @@ export default function DashboardPage() {
                           <th className="py-4 px-4 text-xs font-bold uppercase tracking-wider text-on-surface-variant">Category</th>
                           <th className="py-4 px-4 text-xs font-bold uppercase tracking-wider text-on-surface-variant">Reporter</th>
                           <th className="py-4 px-4 text-xs font-bold uppercase tracking-wider text-on-surface-variant">Phone</th>
-                          <th className="py-4 px-4 text-xs font-bold uppercase tracking-wider text-on-surface-variant">Location</th>
+                          <th className="py-4 px-4 text-xs font-bold uppercase tracking-wider text-on-surface-variant">AI Label</th>
+                          <th className="py-4 px-4 text-xs font-bold uppercase tracking-wider text-on-surface-variant">AI Confidence</th>
                           <th className="py-4 px-4 text-xs font-bold uppercase tracking-wider text-on-surface-variant">Status</th>
                           <th className="py-4 px-4 text-xs font-bold uppercase tracking-wider text-on-surface-variant">Action</th>
                         </tr>
@@ -330,7 +331,7 @@ export default function DashboardPage() {
                       <tbody className="divide-y divide-outline-variant bg-white">
                         {paginatedReports.length === 0 ? (
                           <tr>
-                            <td colSpan="8" className="py-12 text-center text-on-surface-variant font-medium">
+                            <td colSpan="9" className="py-12 text-center text-on-surface-variant font-medium">
                               No reports match the current filters.
                             </td>
                           </tr>
@@ -376,8 +377,24 @@ export default function DashboardPage() {
                                   {r.reporter_phone || '—'}
                                 </td>
 
-                                <td className="py-4 px-4 text-sm text-on-surface-variant truncate max-w-[150px]" title={r.location_name}>
-                                  {r.latitude?.toFixed(5)}, {r.longitude?.toFixed(5)}
+                                <td className="py-4 px-4 text-sm font-semibold text-on-surface font-medium">
+                                  {r.ai_label ? (
+                                    <span className="bg-primary/10 text-primary px-2.5 py-1 rounded-md text-xs font-bold">
+                                      {r.ai_label}
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400 font-normal text-xs">Pending</span>
+                                  )}
+                                </td>
+
+                                <td className="py-4 px-4 text-sm font-mono text-on-surface-variant font-medium">
+                                  {r.ai_confidence ? (
+                                    <span className="bg-primary/10 text-primary px-2 py-0.5 rounded font-bold text-xs">
+                                      {(r.ai_confidence * 100).toFixed(1)}%
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400 font-normal text-xs">—</span>
+                                  )}
                                 </td>
 
                                 <td className="py-4 px-4" onClick={(e) => e.stopPropagation()}>
