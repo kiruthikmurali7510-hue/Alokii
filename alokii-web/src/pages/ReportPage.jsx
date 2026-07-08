@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { uploadImage } from '../services/uploadImage';
 import { runAIPipeline } from '../services/api';
 import { supabase } from '../services/supabaseClient';
+import { detectRoadType } from '../services/roadDetection';
+import { calculatePriority } from '../services/priorityUtils';
 import useGeolocation from '../hooks/useGeolocation';
 import './ReportPage.css';
 
@@ -82,6 +84,18 @@ export default function ReportPage() {
       if (aiLabel === 'pothole') detectedIssueType = 'Pothole';
       else if (aiLabel === 'garbage_overflow') detectedIssueType = 'Garbage Overflow';
 
+      // Detect road type from OSM
+      setSubmitStep('Detecting road type…');
+      const detectedRoadType = await detectRoadType(location.latitude, location.longitude);
+
+      // Calculate initial priority score and levels
+      const priorityInfo = calculatePriority(
+        aiConfidence,
+        detectedIssueType,
+        detectedRoadType,
+        new Date()
+      );
+
       // Step 3: Insert report into Supabase
       setSubmitStep('Saving report…');
       const { error: insertError } = await supabase.from('reports').insert([
@@ -95,9 +109,13 @@ export default function ReportPage() {
           location_name: `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`,
           issue_type: detectedIssueType,
           status: aiResult?.status || 'Pending',
-          priority_level: 'Medium',
+          priority_level: priorityInfo.priorityLevel,
+          priority_score: priorityInfo.priorityScore,
+          issue_severity_score: priorityInfo.severityScore,
+          road_importance_score: priorityInfo.roadScore,
           ai_label: aiLabel,
           ai_confidence: aiConfidence,
+          road_type: detectedRoadType,
         }
       ]);
 

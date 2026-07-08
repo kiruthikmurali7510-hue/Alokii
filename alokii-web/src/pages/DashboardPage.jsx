@@ -3,6 +3,7 @@ import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
 import LeafletMap from '../components/LeafletMap';
+import { calculatePriority, getPriorityExplanation } from '../services/priorityUtils';
 import './DashboardPage.css';
 
 export default function DashboardPage() {
@@ -27,7 +28,7 @@ export default function DashboardPage() {
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 6;
+  const itemsPerPage = 10;
 
   const navigate = useNavigate();
 
@@ -134,9 +135,27 @@ export default function DashboardPage() {
   const inProgressCount = reports.filter(r => (r.status || '').toLowerCase() === 'in progress' || (r.status || '').toLowerCase() === 'in-progress').length;
   const resolvedCount = reports.filter(r => (r.status || '').toLowerCase() === 'resolved').length;
 
-  // Filter reports array
+  // Filter and dynamically calculate priority for reports array
   const filteredReports = useMemo(() => {
-    return reports.filter(r => {
+    const enriched = reports.map(r => {
+      // Recalculate priority dynamically in real-time
+      const prio = calculatePriority(r.ai_confidence, r.issue_type, r.road_type, r.created_at);
+      return {
+        ...r,
+        // Override with dynamically computed values
+        priority_score: prio.priorityScore,
+        priority_level: prio.priorityLevel,
+        time_score: prio.timeScore,
+        time_display: prio.timeDisplay,
+        severity_score: prio.severityScore,
+        road_score: prio.roadScore
+      };
+    });
+
+    // Sort by priority_score DESC (Priority Queue)
+    const sorted = enriched.sort((a, b) => b.priority_score - a.priority_score);
+
+    return sorted.filter(r => {
       // 1. Search Query filter
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -236,6 +255,27 @@ export default function DashboardPage() {
     if (s === 'resolved') return 'bg-green-50 text-green-700 border-green-200';
     if (s === 'in-progress' || s === 'in progress') return 'bg-blue-50 text-blue-700 border-blue-200';
     return 'bg-yellow-50 text-yellow-800 border-yellow-200';
+  };
+
+  const getPriorityBadgeClass = (level) => {
+    const l = (level || '').toLowerCase();
+    if (l.includes('high')) return 'bg-red-50 text-red-700 border border-red-200';
+    if (l.includes('medium')) return 'bg-amber-50 text-amber-700 border border-amber-200';
+    return 'bg-slate-50 text-slate-700 border border-slate-200';
+  };
+
+  const getPriorityDot = (level) => {
+    const l = (level || '').toLowerCase();
+    if (l.includes('high')) return '🔴';
+    if (l.includes('medium')) return '🟡';
+    return '🟢';
+  };
+
+  const getPriorityAnalysisStyle = (level) => {
+    const l = (level || '').toLowerCase();
+    if (l.includes('high')) return { bg: 'bg-red-50/30', border: 'border-red-100', text: 'text-red-700', dashBorder: 'border-red-200' };
+    if (l.includes('medium')) return { bg: 'bg-amber-50/30', border: 'border-amber-100', text: 'text-amber-700', dashBorder: 'border-amber-200' };
+    return { bg: 'bg-slate-50/40', border: 'border-slate-200/60', text: 'text-slate-700', dashBorder: 'border-slate-300/60' };
   };
 
   return (
@@ -386,45 +426,40 @@ export default function DashboardPage() {
           </button>
         </nav>
 
+        {/* Loading Spinner */}
         {loading ? (
-          <div className="flex-1 flex flex-col items-center justify-center py-20">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-            <p className="mt-4 text-on-surface-variant font-semibold">Fetching city reports...</p>
+          <div className="flex-1 flex flex-col items-center justify-center py-20 gap-3">
+            <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            <p className="text-xs text-outline font-bold uppercase tracking-wider">Syncing dashboard data...</p>
           </div>
         ) : (
           <>
-            {/* 1. Dashboard Tab */}
+            {/* 1. Dashboard Table Tab */}
             {activeTab === 'dashboard' && (
-              <div className="flex flex-col gap-4 w-full">
-
-                {/* ── Compact Filter Toolbar ── */}
-                <div className="bg-surface border border-outline-variant rounded-2xl p-4 shadow-sm flex flex-wrap items-end gap-3">
-                  
-                  {/* Category buttons */}
+              <div className="flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                
+                {/* Filter and control controls */}
+                <div className="w-full bg-surface border border-outline-variant rounded-2xl p-4 flex flex-wrap gap-4 items-end shadow-sm">
+                  {/* Category */}
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] text-outline font-bold uppercase tracking-wider">Category</label>
-                    <div className="flex flex-wrap gap-1.5">
-                      {['All', 'Pothole', 'Streetlight', 'Garbage'].map((cat) => (
-                        <button
-                          key={cat}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
-                            selectedCategory === cat
-                              ? 'bg-primary text-white border-primary'
-                              : 'bg-white border-outline-variant text-on-surface-variant hover:bg-surface-container-high'
-                          }`}
-                          onClick={() => setSelectedCategory(cat)}
-                        >
-                          {cat}
-                        </button>
-                      ))}
-                    </div>
+                    <select
+                      className="bg-surface-container-low border border-outline-variant rounded-xl px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-primary font-medium transition-colors duration-200 ease-in-out hover:bg-surface-container-high"
+                      value={selectedCategory}
+                      onChange={(e) => setSelectedCategory(e.target.value)}
+                    >
+                      <option value="All">All Categories</option>
+                      <option value="Pothole">Potholes</option>
+                      <option value="Garbage">Garbage Overflow</option>
+                      <option value="Streetlight">Streetlight Issues</option>
+                    </select>
                   </div>
 
                   {/* Status */}
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] text-outline font-bold uppercase tracking-wider">Status</label>
                     <select
-                      className="bg-surface-container-low border border-outline-variant rounded-xl px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-primary font-medium"
+                      className="bg-surface-container-low border border-outline-variant rounded-xl px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-primary font-medium transition-colors duration-200 ease-in-out hover:bg-surface-container-high"
                       value={selectedStatus}
                       onChange={(e) => setSelectedStatus(e.target.value)}
                     >
@@ -435,11 +470,11 @@ export default function DashboardPage() {
                     </select>
                   </div>
 
-                  {/* Timeframe */}
+                  {/* Time Range */}
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] text-outline font-bold uppercase tracking-wider">Timeframe</label>
+                    <label className="text-[10px] text-outline font-bold uppercase tracking-wider">Time Range</label>
                     <select
-                      className="bg-surface-container-low border border-outline-variant rounded-xl px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-primary font-medium"
+                      className="bg-surface-container-low border border-outline-variant rounded-xl px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-primary font-medium transition-colors duration-200 ease-in-out hover:bg-surface-container-high focus:scale-105"
                       value={selectedTimeframe}
                       onChange={(e) => setSelectedTimeframe(e.target.value)}
                     >
@@ -452,29 +487,17 @@ export default function DashboardPage() {
 
                   {/* Reset */}
                   <button
-                    className="px-4 py-1.5 text-primary font-bold text-xs border border-primary rounded-xl hover:bg-primary hover:text-white transition-all bg-white"
+                    className="px-4 py-1.5 text-primary font-bold text-xs border border-primary rounded-xl hover:bg-primary hover:text-white transition-all bg-white hover:scale-105 focus:ring-2 focus:ring-primary"
                     onClick={resetFilters}
                   >
                     Reset Filters
-                  </button>
-
-                  {/* Spacer */}
-                  <div className="flex-1" />
-
-                  {/* Map Preview shortcut */}
-                  <button
-                    className="flex items-center gap-2 px-4 py-1.5 bg-surface-container-low border border-outline-variant rounded-xl text-xs font-bold text-on-surface hover:bg-primary hover:text-white hover:border-primary transition-all"
-                    onClick={() => setActiveTab('map')}
-                  >
-                    <span className="material-symbols-outlined text-[16px]">map</span>
-                    Open Map ({filteredReports.length})
                   </button>
                 </div>
 
                 {/* ── Full-width Table ── */}
                 <div className="w-full bg-surface border border-outline-variant rounded-2xl overflow-hidden shadow-sm">
                   <div className="px-4 py-3 border-b border-outline-variant flex items-center justify-between bg-white">
-                    <h2 className="text-base font-bold text-on-background">Recent Submissions</h2>
+                    <h2 className="text-base font-bold text-on-background">Priority Queue</h2>
                     <button
                       className="md:hidden bg-primary text-white p-1.5 rounded-full shadow"
                       onClick={handleNewReport}
@@ -488,21 +511,20 @@ export default function DashboardPage() {
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="bg-surface-container-low border-b border-outline-variant">
-                          <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant whitespace-nowrap">Timestamp</th>
-                          <th className="py-3 px-2 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Img</th>
-                          <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Category</th>
-                          <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Reporter</th>
-                          <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant whitespace-nowrap">Phone</th>
-                          <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant whitespace-nowrap">AI Label</th>
-                          <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant whitespace-nowrap">Confidence</th>
+                          <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Issue Type</th>
+                          <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Priority Level</th>
+                          <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant whitespace-nowrap">Priority Score</th>
+                          <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant whitespace-nowrap">Road Importance</th>
                           <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Status</th>
+                          <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Location</th>
+                          <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant whitespace-nowrap">Report Date</th>
                           <th className="py-3 px-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-outline-variant bg-white">
                         {paginatedReports.length === 0 ? (
                           <tr>
-                            <td colSpan="9" className="py-12 text-center text-on-surface-variant font-medium">
+                            <td colSpan="8" className="py-12 text-center text-on-surface-variant font-medium">
                               No reports match the current filters.
                             </td>
                           </tr>
@@ -515,25 +537,7 @@ export default function DashboardPage() {
                                 className="hover:bg-blue-50/30 transition-colors cursor-pointer"
                                 onClick={() => setSelectedReport(r)}
                               >
-                                {/* Timestamp */}
-                                <td className="py-3 px-3 text-xs text-on-surface-variant whitespace-nowrap">
-                                  {new Date(r.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
-                                </td>
-
-                                {/* Evidence thumbnail */}
-                                <td className="py-3 px-2">
-                                  <div className="w-9 h-9 rounded-lg bg-surface-container-highest overflow-hidden border border-outline-variant shrink-0">
-                                    {r.image_url ? (
-                                      <img alt={r.issue_type} className="w-full h-full object-cover" src={r.image_url} />
-                                    ) : (
-                                      <div className="w-full h-full flex items-center justify-center bg-gray-100 text-gray-400">
-                                        <span className="material-symbols-outlined text-[16px]">image</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                </td>
-
-                                {/* Category */}
+                                {/* Issue Type */}
                                 <td className="py-3 px-3">
                                   <div className="flex items-center gap-2">
                                     <div className={`w-6 h-6 ${style.colorClass} rounded-md flex items-center justify-center shrink-0`}>
@@ -543,36 +547,21 @@ export default function DashboardPage() {
                                   </div>
                                 </td>
 
-                                {/* Reporter */}
-                                <td className="py-3 px-3 text-xs text-on-surface font-medium max-w-[100px] truncate">
-                                  {r.reporter_name || 'Anonymous'}
-                                </td>
-
-                                {/* Phone */}
-                                <td className="py-3 px-3 text-xs text-on-surface-variant whitespace-nowrap">
-                                  {r.reporter_phone || '—'}
-                                </td>
-
-                                {/* AI Label */}
+                                {/* Priority Level */}
                                 <td className="py-3 px-3">
-                                  {r.ai_label ? (
-                                    <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-md text-[11px] font-bold whitespace-nowrap">
-                                      {r.ai_label}
-                                    </span>
-                                  ) : (
-                                    <span className="text-gray-400 text-[11px]">Pending</span>
-                                  )}
+                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold whitespace-nowrap ${getPriorityBadgeClass(r.priority_level)}`}>
+                                    {getPriorityDot(r.priority_level)} {r.priority_level}
+                                  </span>
                                 </td>
 
-                                {/* AI Confidence */}
-                                <td className="py-3 px-3">
-                                  {r.ai_confidence ? (
-                                    <span className="bg-primary/10 text-primary px-2 py-0.5 rounded font-bold text-[11px] font-mono whitespace-nowrap">
-                                      {(r.ai_confidence * 100).toFixed(1)}%
-                                    </span>
-                                  ) : (
-                                    <span className="text-gray-400 text-[11px]">—</span>
-                                  )}
+                                {/* Priority Score */}
+                                <td className="py-3 px-3 text-xs font-bold text-on-surface">
+                                  {r.priority_score || 0}/100
+                                </td>
+
+                                {/* Road Importance */}
+                                <td className="py-3 px-3 text-xs font-semibold text-on-surface-variant">
+                                  {r.road_type || 'Unknown'}
                                 </td>
 
                                 {/* Status */}
@@ -586,6 +575,16 @@ export default function DashboardPage() {
                                     <option value="In Progress">In Progress</option>
                                     <option value="Resolved">Resolved</option>
                                   </select>
+                                </td>
+
+                                {/* Location */}
+                                <td className="py-3 px-3 text-xs text-on-surface-variant whitespace-nowrap max-w-[120px] truncate">
+                                  {r.location_name || '—'}
+                                </td>
+
+                                {/* Report Date */}
+                                <td className="py-3 px-3 text-xs text-on-surface-variant whitespace-nowrap">
+                                  {r.time_display ? `${r.time_display} ago` : new Date(r.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
                                 </td>
 
                                 {/* Action */}
@@ -854,12 +853,75 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="flex flex-col gap-1 md:col-span-2">
-                  <span className="text-xs font-extrabold uppercase text-outline tracking-wider">GPS Coordinates</span>
+                  <span className="text-xs font-extrabold uppercase text-outline tracking-wider">GPS Coordinates & Location</span>
                   <span className="text-sm font-semibold text-on-surface">
                     Latitude: {selectedReport.latitude?.toFixed(6)} | Longitude: {selectedReport.longitude?.toFixed(6)}
                   </span>
+                  <span className="text-sm text-on-surface mt-1">
+                    <span className="font-bold">Road Type:</span> {selectedReport.road_type || 'Unknown'}
+                  </span>
                 </div>
               </div>
+
+              {/* Priority Analysis Section */}
+              {(() => {
+                const colors = getPriorityAnalysisStyle(selectedReport.priority_level);
+                return (
+                  <div className={`flex flex-col gap-3 ${colors.bg} border ${colors.border} p-5 rounded-2xl shadow-sm`}>
+                    <span className={`text-xs font-extrabold uppercase ${colors.text} tracking-wider flex items-center gap-1.5`}>
+                      <span className="material-symbols-outlined text-[16px]">analytics</span>
+                      Priority Analysis
+                    </span>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-2">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] uppercase font-bold text-outline">Priority Level</span>
+                        <span className="text-sm font-extrabold flex items-center gap-1 mt-0.5 text-on-surface">
+                          {getPriorityDot(selectedReport.priority_level)} {selectedReport.priority_level}
+                        </span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[10px] uppercase font-bold text-outline">Priority Score</span>
+                        <span className="text-sm font-extrabold text-on-surface mt-0.5">
+                          {selectedReport.priority_score || 0}/100
+                        </span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[10px] uppercase font-bold text-outline">AI Confidence</span>
+                        <span className="text-sm font-extrabold text-on-surface mt-0.5">
+                          {selectedReport.ai_confidence ? `${(selectedReport.ai_confidence * 100).toFixed(1)}%` : '—'}
+                        </span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[10px] uppercase font-bold text-outline">Issue Severity</span>
+                        <span className="text-sm font-semibold text-on-surface mt-0.5">
+                          {selectedReport.severity_score || 40}
+                        </span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[10px] uppercase font-bold text-outline">Road Importance</span>
+                        <span className="text-sm font-semibold text-on-surface mt-0.5">
+                          {selectedReport.road_type || 'Unknown'}
+                        </span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[10px] uppercase font-bold text-outline">Time Waiting</span>
+                        <span className="text-sm font-semibold text-on-surface mt-0.5">
+                          {selectedReport.time_display || '0 mins'}
+                        </span>
+                      </div>
+                    </div>
+                    <p className={`text-xs italic text-on-surface-variant bg-white/80 p-3 rounded-xl border border-dashed ${colors.dashBorder} mt-2 leading-relaxed`}>
+                      "{getPriorityExplanation(
+                        selectedReport.priority_level,
+                        selectedReport.ai_confidence,
+                        selectedReport.issue_type,
+                        selectedReport.road_type,
+                        selectedReport.time_display || '0 mins'
+                      )}"
+                    </p>
+                  </div>
+                );
+              })()}
 
               {selectedReport.description && (
                 <div className="flex flex-col gap-1.5">
