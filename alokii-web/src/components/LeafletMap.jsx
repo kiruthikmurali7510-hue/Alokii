@@ -3,7 +3,6 @@ import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import './LeafletMap.css';
-import potholeImg from '../assets/pothole.jpg';
 
 export default function LeafletMap({ center = [11.2719, 77.4120], zoom = 15, markers = [], onMarkerClick }) {
   const mapRef = useRef(null);
@@ -31,9 +30,7 @@ export default function LeafletMap({ center = [11.2719, 77.4120], zoom = 15, mar
           // Create a custom, highly visible marker icon
           const isPothole = (m.issue_type || m.issueType)?.toLowerCase().includes('pothole');
           const markerColor = isPothole ? '#ef4444' : '#f59e0b'; // Red for potholes, Orange for garbage
-          const emoji = isPothole 
-            ? `<img src="${potholeImg}" style="width: 24px; height: 24px; border-radius: 50%; object-fit: cover; display: block;" />` 
-            : '🗑️';
+          const emoji = isPothole ? '🕳️' : '🗑️';
 
           // Status-based border color
           const status = (m.status || '').toLowerCase();

@@ -1,15 +1,19 @@
 // src/pages/DashboardPage.jsx
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
 import LeafletMap from '../components/LeafletMap';
 import './DashboardPage.css';
-import potholeImg from '../assets/pothole.jpg';
 
 export default function DashboardPage() {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedReport, setSelectedReport] = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  // Undo delete state
+  const [undoReport, setUndoReport] = useState(null);   // the report object cached for undo
+  const undoTimerRef = useRef(null);                     // setTimeout handle
+  const UNDO_DURATION = 15000; // 15 seconds
   
   const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'map', 'analytics'
   const [mapStatsVisible, setMapStatsVisible] = useState(true);
@@ -80,17 +84,43 @@ export default function DashboardPage() {
     navigate('/report');
   };
 
-  const handleDeleteReport = async (reportId) => {
-    if (!window.confirm('Are you sure you want to delete this report? This cannot be undone.')) return;
-    // Optimistically remove from local state immediately
+  const handleDeleteReport = (reportId) => {
+    // Find & cache the report for undo before removing
+    const reportToDelete = reports.find(r => r.id === reportId);
+    if (!reportToDelete) return;
+
+    // Optimistically remove from UI immediately
     setReports(prev => prev.filter(r => r.id !== reportId));
     if (selectedReport?.id === reportId) setSelectedReport(null);
-    const { error } = await supabase.from('reports').delete().eq('id', reportId);
-    if (error) {
-      console.error('Error deleting report:', error);
-      alert('Failed to delete report: ' + error.message);
-      fetchReports(); // revert on failure
-    }
+    setConfirmDeleteId(null);
+
+    // Show undo toast
+    setUndoReport(reportToDelete);
+
+    // Clear any existing timer
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+
+    // After 15s, actually delete from DB
+    undoTimerRef.current = setTimeout(async () => {
+      setUndoReport(null);
+      const { error } = await supabase.from('reports').delete().eq('id', reportId);
+      if (error) {
+        console.error('Error deleting report:', error);
+        fetchReports(); // revert on failure
+      }
+    }, UNDO_DURATION);
+  };
+
+  const handleUndoDelete = () => {
+    if (!undoReport) return;
+    // Cancel the pending DB delete
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    // Restore the report back into local state (keep sorted by date desc)
+    setReports(prev => {
+      const restored = [undoReport, ...prev];
+      return restored.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    });
+    setUndoReport(null);
   };
 
   const handleLogout = () => {
@@ -506,13 +536,9 @@ export default function DashboardPage() {
                                 {/* Category */}
                                 <td className="py-3 px-3">
                                   <div className="flex items-center gap-2">
-                                    {style.icon === 'construction' ? (
-                                      <img src={potholeImg} alt="Pothole" className="w-6 h-6 rounded-md object-cover shrink-0" />
-                                    ) : (
-                                      <div className={`w-6 h-6 ${style.colorClass} rounded-md flex items-center justify-center shrink-0`}>
-                                        <span className="material-symbols-outlined text-[14px]">{style.icon}</span>
-                                      </div>
-                                    )}
+                                    <div className={`w-6 h-6 ${style.colorClass} rounded-md flex items-center justify-center shrink-0`}>
+                                      <span className="material-symbols-outlined text-[14px]">{style.icon}</span>
+                                    </div>
                                     <span className="font-semibold text-xs text-on-surface">{r.issue_type || 'Other'}</span>
                                   </div>
                                 </td>
@@ -564,19 +590,21 @@ export default function DashboardPage() {
 
                                 {/* Action */}
                                 <td className="py-3 px-3" onClick={(e) => e.stopPropagation()}>
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-1.5">
                                     <button
-                                      className="text-primary hover:underline font-bold text-xs"
+                                      className="flex items-center gap-1 bg-primary/10 hover:bg-primary text-primary hover:text-white text-[11px] font-bold px-2.5 py-1.5 rounded-lg transition-all duration-200 hover:scale-105 active:scale-95 whitespace-nowrap"
                                       onClick={() => setSelectedReport(r)}
+                                      title="View report details"
                                     >
-                                      Details
+                                      <span className="material-symbols-outlined text-[13px]">open_in_new</span>
+                                      View
                                     </button>
                                     <button
-                                      className="text-red-500 hover:text-red-700 transition-colors"
+                                      className="flex items-center justify-center w-7 h-7 rounded-lg bg-red-50 hover:bg-red-500 text-red-500 hover:text-white transition-all duration-200 hover:scale-105 active:scale-95"
                                       onClick={() => handleDeleteReport(r.id)}
                                       title="Delete report"
                                     >
-                                      <span className="material-symbols-outlined text-[16px] block">delete</span>
+                                      <span className="material-symbols-outlined text-[14px]">delete</span>
                                     </button>
                                   </div>
                                 </td>
@@ -765,11 +793,7 @@ export default function DashboardPage() {
             {/* Modal Header */}
             <div className="border-b border-outline-variant pb-4 mb-6">
               <div className="flex items-center gap-3 mb-2">
-                {getIssueStyle(selectedReport.issue_type).icon === 'construction' ? (
-                  <img src={potholeImg} alt="Pothole" className="w-8 h-8 rounded-full object-cover shrink-0" />
-                ) : (
-                  <span className="text-2xl">{getIssueStyle(selectedReport.issue_type).icon === 'lightbulb' ? '💡' : '🗑️'}</span>
-                )}
+                <span className="text-2xl">{getIssueStyle(selectedReport.issue_type).icon === 'construction' ? '🕳️' : getIssueStyle(selectedReport.issue_type).icon === 'lightbulb' ? '💡' : '🗑️'}</span>
                 <h2 className="text-xl font-extrabold text-on-surface">{selectedReport.issue_type || 'Report Details'}</h2>
               </div>
               <p className="text-xs text-outline">
@@ -855,9 +879,100 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
+
+            {/* Modal Footer — Delete */}
+            <div className="mt-6 pt-5 border-t border-outline-variant flex justify-between items-center">
+              <p className="text-xs text-outline">Only administrators can delete reports.</p>
+              <button
+                className="flex items-center gap-2 bg-red-50 hover:bg-red-500 text-red-500 hover:text-white font-bold text-sm px-4 py-2 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+                onClick={() => setConfirmDeleteId(selectedReport.id)}
+              >
+                <span className="material-symbols-outlined text-[16px]">delete</span>
+                Delete Report
+              </button>
+            </div>
           </div>
         </div>
       )}
+
+      {/* Custom Confirmation Dialog */}
+      {confirmDeleteId && (
+        <div
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex justify-center items-center z-[10000] p-4"
+          onClick={() => setConfirmDeleteId(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 flex flex-col gap-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Icon */}
+            <div className="flex flex-col items-center gap-3 text-center">
+              <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center">
+                <span className="material-symbols-outlined text-red-500 text-[28px]">delete_forever</span>
+              </div>
+              <h3 className="text-lg font-extrabold text-on-surface">Delete Report?</h3>
+              <p className="text-sm text-on-surface-variant leading-relaxed">
+                This action is <strong>permanent</strong> and cannot be undone. The report will be removed from both the dashboard and the map.
+              </p>
+            </div>
+            {/* Actions */}
+            <div className="flex gap-3">
+              <button
+                className="flex-1 py-2.5 rounded-xl border border-outline-variant font-bold text-sm text-on-surface hover:bg-surface-container-high transition-all"
+                onClick={() => setConfirmDeleteId(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold text-sm transition-all hover:scale-105 active:scale-95 shadow-md"
+                onClick={() => handleDeleteReport(confirmDeleteId)}
+              >
+                Yes, Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Undo Delete Toast */}
+      {undoReport && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[10001] w-full max-w-md px-4 animate-in slide-in-from-bottom-4 fade-in duration-300">
+          <div className="bg-gray-900 text-white rounded-2xl shadow-2xl overflow-hidden">
+            {/* Countdown progress bar */}
+            <div
+              className="h-1 bg-primary rounded-t-2xl"
+              style={{
+                animation: `shrink ${UNDO_DURATION}ms linear forwards`,
+              }}
+            />
+            <div className="flex items-center gap-3 px-5 py-4">
+              <div className="w-9 h-9 rounded-full bg-red-500/20 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-red-400 text-[18px]">delete</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-white leading-tight">Report deleted</p>
+                <p className="text-xs text-gray-400 truncate mt-0.5">
+                  {undoReport.issue_type || 'Report'} — {undoReport.reporter_name || 'Anonymous'}
+                </p>
+              </div>
+              <button
+                className="shrink-0 bg-primary hover:bg-on-primary-fixed-variant text-white font-extrabold text-sm px-4 py-2 rounded-xl transition-all hover:scale-105 active:scale-95"
+                onClick={handleUndoDelete}
+              >
+                Undo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Keyframe for countdown bar */}
+      <style>{`
+        @keyframes shrink {
+          from { width: 100%; }
+          to   { width: 0%; }
+        }
+      `}</style>
 
     </div>
   );
