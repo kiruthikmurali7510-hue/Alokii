@@ -7,11 +7,7 @@ import { supabase } from '../services/supabaseClient';
 import useGeolocation from '../hooks/useGeolocation';
 import './ReportPage.css';
 
-const ISSUE_TYPES = [
-  { value: 'Pothole', emoji: '🕳️', color: '#EF4444' },
-  { value: 'Garbage Overflow', emoji: '🗑️', color: '#F59E0B' },
-  { value: 'Streetlight Issue', emoji: '💡', color: '#3B82F6' },
-];
+
 
 export default function ReportPage() {
   const navigate = useNavigate();
@@ -19,7 +15,6 @@ export default function ReportPage() {
   // Form fields
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [issueType, setIssueType] = useState('Pothole');
   const [description, setDescription] = useState('');
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
@@ -82,8 +77,12 @@ export default function ReportPage() {
       const aiLabel = aiResult?.label || null;
       const aiConfidence = aiResult?.confidence || null;
 
+      // Auto-classify issue type from AI result
+      let detectedIssueType = 'Other';
+      if (aiLabel === 'pothole') detectedIssueType = 'Pothole';
+      else if (aiLabel === 'garbage_overflow') detectedIssueType = 'Garbage Overflow';
+
       // Step 3: Insert report into Supabase
-      // Column names must match the actual Supabase table schema from App.js
       setSubmitStep('Saving report…');
       const { error: insertError } = await supabase.from('reports').insert([
         {
@@ -94,11 +93,11 @@ export default function ReportPage() {
           latitude: location.latitude,
           longitude: location.longitude,
           location_name: `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`,
-          issue_type: issueType,
+          issue_type: detectedIssueType,
           status: aiResult?.status || 'Pending',
           priority_level: 'Medium',
-          ai_label: aiResult?.label ?? null,
-          ai_confidence: aiResult?.confidence ?? null,
+          ai_label: aiLabel,
+          ai_confidence: aiConfidence,
         }
       ]);
 
@@ -194,31 +193,9 @@ export default function ReportPage() {
           )}
         </div>
 
-        {/* Section 3: Issue Type */}
+        {/* Section 3: Description */}
         <div className="form-section">
-          <h3 className="section-title">3. Issue Type *</h3>
-          <div className="issue-grid">
-            {ISSUE_TYPES.map((t) => (
-              <button
-                key={t.value}
-                type="button"
-                className={`issue-card ${issueType === t.value ? 'selected' : ''}`}
-                style={issueType === t.value ? { borderColor: t.color, backgroundColor: t.color + '18' } : {}}
-                onClick={() => setIssueType(t.value)}
-                disabled={submitting}
-              >
-                <span className="issue-emoji">{t.emoji}</span>
-                <span className="issue-label" style={issueType === t.value ? { color: t.color, fontWeight: 700 } : {}}>
-                  {t.value}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Section 4: Description */}
-        <div className="form-section">
-          <h3 className="section-title">4. Additional Details</h3>
+          <h3 className="section-title">3. Additional Details</h3>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -228,9 +205,9 @@ export default function ReportPage() {
           />
         </div>
 
-        {/* Section 5: Location */}
+        {/* Section 4: Location */}
         <div className="form-section">
-          <h3 className="section-title">5. Location</h3>
+          <h3 className="section-title">4. Location</h3>
           {geoLoading && <p className="geo-status detecting">📡 Detecting your location…</p>}
           {!geoLoading && position && (
             <p className="geo-status success">

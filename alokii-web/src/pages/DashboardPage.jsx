@@ -1,18 +1,19 @@
 // src/pages/DashboardPage.jsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
 import LeafletMap from '../components/LeafletMap';
 import './DashboardPage.css';
+import potholeImg from '../assets/pothole.jpg';
 
 export default function DashboardPage() {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedReport, setSelectedReport] = useState(null);
   
-  // Tabs
   const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'map', 'analytics'
   const [mapStatsVisible, setMapStatsVisible] = useState(true);
+  const [hideResolvedOnMap, setHideResolvedOnMap] = useState(false);
   
   // Filtering & Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -79,6 +80,19 @@ export default function DashboardPage() {
     navigate('/report');
   };
 
+  const handleDeleteReport = async (reportId) => {
+    if (!window.confirm('Are you sure you want to delete this report? This cannot be undone.')) return;
+    // Optimistically remove from local state immediately
+    setReports(prev => prev.filter(r => r.id !== reportId));
+    if (selectedReport?.id === reportId) setSelectedReport(null);
+    const { error } = await supabase.from('reports').delete().eq('id', reportId);
+    if (error) {
+      console.error('Error deleting report:', error);
+      alert('Failed to delete report: ' + error.message);
+      fetchReports(); // revert on failure
+    }
+  };
+
   const handleLogout = () => {
     sessionStorage.removeItem('isAdminLoggedIn');
     navigate('/');
@@ -91,51 +105,71 @@ export default function DashboardPage() {
   const resolvedCount = reports.filter(r => (r.status || '').toLowerCase() === 'resolved').length;
 
   // Filter reports array
-  const filteredReports = reports.filter(r => {
-    // 1. Search Query filter
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const nameMatch = r.reporter_name?.toLowerCase().includes(q);
-      const phoneMatch = r.reporter_phone?.toLowerCase().includes(q);
-      const typeMatch = r.issue_type?.toLowerCase().includes(q);
-      const descMatch = r.description?.toLowerCase().includes(q);
-      const locMatch = r.location_name?.toLowerCase().includes(q);
-      if (!nameMatch && !phoneMatch && !typeMatch && !descMatch && !locMatch) {
-        return false;
+  const filteredReports = useMemo(() => {
+    return reports.filter(r => {
+      // 1. Search Query filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const nameMatch = r.reporter_name?.toLowerCase().includes(q);
+        const phoneMatch = r.reporter_phone?.toLowerCase().includes(q);
+        const typeMatch = r.issue_type?.toLowerCase().includes(q);
+        const descMatch = r.description?.toLowerCase().includes(q);
+        const locMatch = r.location_name?.toLowerCase().includes(q);
+        if (!nameMatch && !phoneMatch && !typeMatch && !descMatch && !locMatch) {
+          return false;
+        }
       }
-    }
-    // 2. Category Filter
-    if (selectedCategory !== 'All') {
-      const type = r.issue_type?.toLowerCase() || '';
-      const filterType = selectedCategory.toLowerCase();
-      if (filterType === 'streetlight') {
-        if (!type.includes('streetlight')) return false;
-      } else if (filterType === 'garbage') {
-        if (!type.includes('garbage')) return false;
-      } else {
-        if (!type.includes(filterType)) return false;
+      // 2. Category Filter
+      if (selectedCategory !== 'All') {
+        const type = r.issue_type?.toLowerCase() || '';
+        const filterType = selectedCategory.toLowerCase();
+        if (filterType === 'streetlight') {
+          if (!type.includes('streetlight')) return false;
+        } else if (filterType === 'garbage') {
+          if (!type.includes('garbage')) return false;
+        } else {
+          if (!type.includes(filterType)) return false;
+        }
       }
-    }
-    // 3. Status Filter
-    if (selectedStatus !== 'All') {
-      if ((r.status || '').toLowerCase() !== selectedStatus.toLowerCase()) {
-        return false;
+      // 3. Status Filter
+      if (selectedStatus !== 'All') {
+        if ((r.status || '').toLowerCase() !== selectedStatus.toLowerCase()) {
+          return false;
+        }
       }
-    }
-    // 4. Timeframe Filter
-    if (selectedTimeframe !== 'All') {
-      const reportDate = new Date(r.created_at);
-      const now = new Date();
-      if (selectedTimeframe === '24h') {
-        if (now - reportDate > 24 * 60 * 60 * 1000) return false;
-      } else if (selectedTimeframe === '7d') {
-        if (now - reportDate > 7 * 24 * 60 * 60 * 1000) return false;
-      } else if (selectedTimeframe === '30d') {
-        if (now - reportDate > 30 * 24 * 60 * 60 * 1000) return false;
+      // 4. Timeframe Filter
+      if (selectedTimeframe !== 'All') {
+        const reportDate = new Date(r.created_at);
+        const now = new Date();
+        if (selectedTimeframe === '24h') {
+          if (now - reportDate > 24 * 60 * 60 * 1000) return false;
+        } else if (selectedTimeframe === '7d') {
+          if (now - reportDate > 7 * 24 * 60 * 60 * 1000) return false;
+        } else if (selectedTimeframe === '30d') {
+          if (now - reportDate > 30 * 24 * 60 * 60 * 1000) return false;
+        }
       }
-    }
-    return true;
-  });
+      return true;
+    });
+  }, [reports, searchQuery, selectedCategory, selectedStatus, selectedTimeframe]);
+
+  // Memoize map center coordinates to stabilize map references
+  const mapCenter = useMemo(() => {
+    return filteredReports.length 
+      ? [filteredReports[0].latitude, filteredReports[0].longitude] 
+      : [11.2719, 77.4120];
+  }, [filteredReports]);
+
+  // Apply hide-resolved filter for map markers only
+  const mapMarkers = useMemo(() => {
+    if (!hideResolvedOnMap) return filteredReports;
+    return filteredReports.filter(r => (r.status || '').toLowerCase() !== 'resolved');
+  }, [filteredReports, hideResolvedOnMap]);
+
+  // Wrap marker click handler to preserve function reference across renders
+  const handleMarkerClick = useCallback((report) => {
+    setSelectedReport(report);
+  }, []);
 
   // Paginated subset
   const totalFiltered = filteredReports.length;
@@ -472,9 +506,13 @@ export default function DashboardPage() {
                                 {/* Category */}
                                 <td className="py-3 px-3">
                                   <div className="flex items-center gap-2">
-                                    <div className={`w-6 h-6 ${style.colorClass} rounded-md flex items-center justify-center shrink-0`}>
-                                      <span className="material-symbols-outlined text-[14px]">{style.icon}</span>
-                                    </div>
+                                    {style.icon === 'construction' ? (
+                                      <img src={potholeImg} alt="Pothole" className="w-6 h-6 rounded-md object-cover shrink-0" />
+                                    ) : (
+                                      <div className={`w-6 h-6 ${style.colorClass} rounded-md flex items-center justify-center shrink-0`}>
+                                        <span className="material-symbols-outlined text-[14px]">{style.icon}</span>
+                                      </div>
+                                    )}
                                     <span className="font-semibold text-xs text-on-surface">{r.issue_type || 'Other'}</span>
                                   </div>
                                 </td>
@@ -525,13 +563,22 @@ export default function DashboardPage() {
                                 </td>
 
                                 {/* Action */}
-                                <td className="py-3 px-3">
-                                  <button
-                                    className="text-primary hover:underline font-bold text-xs"
-                                    onClick={() => setSelectedReport(r)}
-                                  >
-                                    Details
-                                  </button>
+                                <td className="py-3 px-3" onClick={(e) => e.stopPropagation()}>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      className="text-primary hover:underline font-bold text-xs"
+                                      onClick={() => setSelectedReport(r)}
+                                    >
+                                      Details
+                                    </button>
+                                    <button
+                                      className="text-red-500 hover:text-red-700 transition-colors"
+                                      onClick={() => handleDeleteReport(r.id)}
+                                      title="Delete report"
+                                    >
+                                      <span className="material-symbols-outlined text-[16px] block">delete</span>
+                                    </button>
+                                  </div>
                                 </td>
                               </tr>
                             );
@@ -593,6 +640,17 @@ export default function DashboardPage() {
                         Show Stats
                       </button>
                     )}
+                    <button
+                      className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all hover:scale-105 active:scale-95 flex items-center gap-1.5 border ${
+                        hideResolvedOnMap
+                          ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
+                          : 'bg-white border-outline-variant text-on-surface-variant hover:bg-surface-container-high'
+                      }`}
+                      onClick={() => setHideResolvedOnMap(prev => !prev)}
+                    >
+                      <span className="material-symbols-outlined text-[16px]">{hideResolvedOnMap ? 'visibility_off' : 'visibility'}</span>
+                      {hideResolvedOnMap ? 'Show Resolved' : 'Hide Resolved'}
+                    </button>
                     <button 
                       className="bg-primary text-white text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-on-primary-fixed-variant transition-all hover:scale-105 active:scale-95"
                       onClick={() => setActiveTab('dashboard')}
@@ -603,10 +661,10 @@ export default function DashboardPage() {
                 </div>
                 <div className="w-full h-[500px] relative">
                   <LeafletMap 
-                    center={filteredReports.length ? [filteredReports[0].latitude, filteredReports[0].longitude] : [11.2719, 77.4120]}
+                    center={mapCenter}
                     zoom={13}
-                    markers={filteredReports}
-                    onMarkerClick={(report) => setSelectedReport(report)}
+                    markers={mapMarkers}
+                    onMarkerClick={handleMarkerClick}
                   />
                 </div>
               </div>
@@ -707,7 +765,11 @@ export default function DashboardPage() {
             {/* Modal Header */}
             <div className="border-b border-outline-variant pb-4 mb-6">
               <div className="flex items-center gap-3 mb-2">
-                <span className="text-2xl">{getIssueStyle(selectedReport.issue_type).icon === 'construction' ? '🕳️' : getIssueStyle(selectedReport.issue_type).icon === 'lightbulb' ? '💡' : '🗑️'}</span>
+                {getIssueStyle(selectedReport.issue_type).icon === 'construction' ? (
+                  <img src={potholeImg} alt="Pothole" className="w-8 h-8 rounded-full object-cover shrink-0" />
+                ) : (
+                  <span className="text-2xl">{getIssueStyle(selectedReport.issue_type).icon === 'lightbulb' ? '💡' : '🗑️'}</span>
+                )}
                 <h2 className="text-xl font-extrabold text-on-surface">{selectedReport.issue_type || 'Report Details'}</h2>
               </div>
               <p className="text-xs text-outline">
