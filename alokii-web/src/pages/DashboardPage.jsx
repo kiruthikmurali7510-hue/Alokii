@@ -15,6 +15,10 @@ export default function DashboardPage() {
   const [undoReport, setUndoReport] = useState(null);   // the report object cached for undo
   const undoTimerRef = useRef(null);                     // setTimeout handle
   const UNDO_DURATION = 15000; // 15 seconds
+  // Session-level cache: report id → { hospitalCount, policeCount, shopCount, riskScore }
+  // Prevents redundant Geoapify calls when the same report is opened more than once.
+  // Cleared automatically on page refresh (lives only in memory).
+  const insightsCacheRef = useRef(new Map());
   
   const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'map', 'analytics'
   const [mapStatsVisible, setMapStatsVisible] = useState(true);
@@ -232,8 +236,9 @@ export default function DashboardPage() {
   }, []);
 
   // Dynamic Nearby Insights Fetcher for Details Modal
-  // Always fetch LIVE from Geoapify — never trust stale DB values
-  // (old reports may have been stored with wrong category queries that returned 0)
+  // Uses an in-memory session cache (insightsCacheRef) so each report is only
+  // fetched ONCE per page session — saves API quota while always showing
+  // accurate data (stale DB zeros are bypassed on first open).
   useEffect(() => {
     if (!selectedReport) {
       setInsightsData(null);
@@ -241,22 +246,32 @@ export default function DashboardPage() {
       return;
     }
 
-    // Skip re-fetch if coordinates are missing
+    // No coordinates → show neutral fallback immediately
     if (!selectedReport.latitude || !selectedReport.longitude) {
       setInsightsData({ hospitalCount: 0, policeCount: 0, shopCount: 0, riskScore: 30 });
       setLoadingInsights(false);
       return;
     }
 
+    // ✅ Cache HIT — show instantly, zero API calls
+    if (insightsCacheRef.current.has(selectedReport.id)) {
+      setInsightsData(insightsCacheRef.current.get(selectedReport.id));
+      setLoadingInsights(false);
+      return;
+    }
+
+    // 🌐 Cache MISS — fetch live then store in cache
     setLoadingInsights(true);
     setInsightsData(null);
 
     import('../services/nearbyInsights').then(({ getNearbyInsights }) => {
       getNearbyInsights(selectedReport.latitude, selectedReport.longitude)
         .then(data => {
+          // Store in session cache so re-opens are instant
+          insightsCacheRef.current.set(selectedReport.id, data);
           setInsightsData(data);
           setLoadingInsights(false);
-          // Patch local state so priority score reflects fresh data
+          // Patch local report state so priority score reflects fresh data
           setReports(prev => prev.map(r => r.id === selectedReport.id ? {
             ...r,
             nearby_hospital_count: data.hospitalCount,
