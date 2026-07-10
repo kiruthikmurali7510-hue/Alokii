@@ -1045,7 +1045,7 @@ export default function DashboardPage() {
                 ) : insightsData ? (
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
                     <div className="flex flex-col bg-white p-3 rounded-xl border border-slate-100 shadow-2xs">
-                      <span className="text-[10px] uppercase font-bold text-outline">Hospitals Nearby</span>
+                      <span className="text-[10px] uppercase font-bold text-outline">Medical Facilities</span>
                       <span className="text-sm font-extrabold text-on-surface mt-1 flex items-center gap-1">
                         🏥 {insightsData.hospitalCount}
                       </span>
@@ -1059,7 +1059,7 @@ export default function DashboardPage() {
                     </div>
                     
                     <div className="flex flex-col bg-white p-3 rounded-xl border border-slate-100 shadow-2xs">
-                      <span className="text-[10px] uppercase font-bold text-outline">Shops Nearby</span>
+                      <span className="text-[10px] uppercase font-bold text-outline">Food / Shops</span>
                       <span className="text-sm font-extrabold text-on-surface mt-1 flex items-center gap-1">
                         🛍️ {insightsData.shopCount}
                       </span>
