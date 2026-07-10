@@ -39,6 +39,11 @@ export default function DashboardPage() {
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [insightsData, setInsightsData] = useState(null);
 
+  // Review Needed — admin classification state
+  // classifySelection: { [reportId]: selectedCategory }
+  const [classifySelection, setClassifySelection] = useState({});
+  const [classifyingId, setClassifyingId] = useState(null); // which report is being saved
+
   // Watch tab changes to collapse stats in map mode
   useEffect(() => {
     if (activeTab === 'map') {
@@ -136,15 +141,22 @@ export default function DashboardPage() {
     navigate('/');
   };
 
-  // Dynamic calculations for status totals
-  const totalCount = reports.length;
-  const pendingCount = reports.filter(r => (r.status || '').toLowerCase() === 'pending').length;
-  const inProgressCount = reports.filter(r => (r.status || '').toLowerCase() === 'in progress' || (r.status || '').toLowerCase() === 'in-progress').length;
-  const resolvedCount = reports.filter(r => (r.status || '').toLowerCase() === 'resolved').length;
+  // Dynamic calculations for status totals (REVIEW_NEEDED excluded from main counts)
+  const reviewReports = useMemo(() =>
+    reports.filter(r => (r.status || '').toUpperCase() === 'REVIEW_NEEDED'),
+  [reports]);
+  const mainReports = useMemo(() =>
+    reports.filter(r => (r.status || '').toUpperCase() !== 'REVIEW_NEEDED'),
+  [reports]);
+  const totalCount = mainReports.length;
+  const pendingCount = mainReports.filter(r => (r.status || '').toLowerCase() === 'pending').length;
+  const inProgressCount = mainReports.filter(r => (r.status || '').toLowerCase() === 'in progress' || (r.status || '').toLowerCase() === 'in-progress').length;
+  const resolvedCount = mainReports.filter(r => (r.status || '').toLowerCase() === 'resolved').length;
 
   // Filter and dynamically calculate priority for reports array
+  // REVIEW_NEEDED reports are STRICTLY excluded — they never enter the priority queue
   const filteredReports = useMemo(() => {
-    const enriched = reports.map(r => {
+    const enriched = mainReports.map(r => {
       // Recalculate priority dynamically in real-time
       const prio = calculatePriority(r.ai_confidence, r.issue_type, r.road_type, r.created_at, r.nearby_risk_score);
       return {
@@ -215,7 +227,7 @@ export default function DashboardPage() {
       }
       return true;
     });
-  }, [reports, searchQuery, selectedCategory, selectedStatus, selectedTimeframe, selectedPriorityLevel]);
+  }, [mainReports, searchQuery, selectedCategory, selectedStatus, selectedTimeframe, selectedPriorityLevel]);
 
   // Memoize map center coordinates to stabilize map references
   const mapCenter = useMemo(() => {
@@ -335,7 +347,84 @@ export default function DashboardPage() {
     const s = (status || '').toLowerCase();
     if (s === 'resolved') return 'bg-green-50 text-green-700 border-green-200';
     if (s === 'in-progress' || s === 'in progress') return 'bg-blue-50 text-blue-700 border-blue-200';
+    if (s === 'review_needed') return 'bg-orange-50 text-orange-700 border-orange-200';
     return 'bg-yellow-50 text-yellow-800 border-yellow-200';
+  };
+
+  // Admin: classify a REVIEW_NEEDED report and move it to the main queue
+  const handleClassifyReport = async (report) => {
+    const selectedCategory = classifySelection[report.id];
+    if (!selectedCategory) return;
+    setClassifyingId(report.id);
+    try {
+      // 1. Fetch road type + nearby insights (may use session cache)
+      const [{ detectRoadType }, { getNearbyInsights }, { calculatePriority: calcPrio }] = await Promise.all([
+        import('../services/roadDetection'),
+        import('../services/nearbyInsights'),
+        import('../services/priorityUtils'),
+      ]);
+      const roadType   = await detectRoadType(report.latitude, report.longitude);
+      const nearby     = await getNearbyInsights(report.latitude, report.longitude);
+      const priorityInfo = calcPrio(
+        report.ai_confidence ?? 0.2,
+        selectedCategory,
+        roadType,
+        report.created_at,
+        nearby.riskScore
+      );
+
+      // 2. Persist to Supabase
+      const { error: updateError } = await supabase
+        .from('reports')
+        .update({
+          ai_label:              selectedCategory.toLowerCase().replace(/ /g, '_'),
+          issue_type:            selectedCategory,
+          status:                'Pending',
+          road_type:             roadType,
+          priority_score:        priorityInfo.priorityScore,
+          priority_level:        priorityInfo.priorityLevel,
+          issue_severity_score:  priorityInfo.severityScore,
+          road_importance_score: priorityInfo.roadScore,
+          nearby_hospital_count: nearby.hospitalCount,
+          nearby_police_count:   nearby.policeCount,
+          nearby_shop_count:     nearby.shopCount,
+          nearby_risk_score:     nearby.riskScore,
+        })
+        .eq('id', report.id);
+
+      if (updateError) throw new Error(updateError.message);
+
+      // 3. Patch local state — report moves from review queue to main queue
+      setReports(prev => prev.map(r => r.id === report.id ? {
+        ...r,
+        ai_label:              selectedCategory.toLowerCase().replace(/ /g, '_'),
+        issue_type:            selectedCategory,
+        status:                'Pending',
+        road_type:             roadType,
+        priority_score:        priorityInfo.priorityScore,
+        priority_level:        priorityInfo.priorityLevel,
+        nearby_hospital_count: nearby.hospitalCount,
+        nearby_police_count:   nearby.policeCount,
+        nearby_shop_count:     nearby.shopCount,
+        nearby_risk_score:     nearby.riskScore,
+      } : r));
+
+      // Store fresh insights in session cache
+      insightsCacheRef.current.set(report.id, {
+        hospitalCount: nearby.hospitalCount,
+        policeCount:   nearby.policeCount,
+        shopCount:     nearby.shopCount,
+        riskScore:     nearby.riskScore,
+      });
+
+      // Clear classification selection for this report
+      setClassifySelection(prev => { const n = { ...prev }; delete n[report.id]; return n; });
+    } catch (err) {
+      console.error('Classification error:', err);
+      alert('Failed to classify report: ' + err.message);
+    } finally {
+      setClassifyingId(null);
+    }
   };
 
   const getPriorityBadgeClass = (level) => {
@@ -504,6 +593,18 @@ export default function DashboardPage() {
           >
             <span className="material-symbols-outlined text-[20px]">analytics</span>
             Analytics Breakdowns
+          </button>
+          <button 
+            className={`py-4 px-2 font-semibold text-sm flex items-center gap-2 border-b-2 transition-all outline-none ${activeTab === 'review' ? 'text-orange-600 border-orange-500' : 'text-on-surface-variant border-transparent hover:text-orange-600'}`} 
+            onClick={() => setActiveTab('review')}
+          >
+            <span className="material-symbols-outlined text-[20px]">rate_review</span>
+            Review Needed
+            {reviewReports.length > 0 && (
+              <span className="ml-1 px-2 py-0.5 text-[10px] font-black rounded-full bg-orange-500 text-white animate-pulse">
+                {reviewReports.length}
+              </span>
+            )}
           </button>
         </nav>
 
@@ -885,7 +986,151 @@ export default function DashboardPage() {
 
       </main>
 
+      {/* 4. Review Needed Tab */}
+      {activeTab === 'review' && (
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 pb-12">
+          <div className="mb-6 p-5 rounded-2xl border border-orange-200 bg-orange-50 flex items-start gap-3">
+            <span className="material-symbols-outlined text-orange-500 text-[28px] mt-0.5">warning</span>
+            <div>
+              <p className="font-bold text-orange-800 text-sm">Admin Action Required</p>
+              <p className="text-orange-700 text-xs mt-0.5">
+                These reports were flagged because the AI classification was uncertain (confidence &lt; 40% or label was unrecognised).
+                They are <strong>completely excluded</strong> from the priority queue until you manually classify them.
+              </p>
+            </div>
+          </div>
+
+          {reviewReports.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-24 text-center gap-4">
+              <span className="material-symbols-outlined text-[64px] text-green-400">check_circle</span>
+              <p className="font-bold text-on-background text-lg">All clear!</p>
+              <p className="text-on-surface-variant text-sm">No reports are waiting for review right now.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+              {reviewReports.map(report => {
+                const isSaving = classifyingId === report.id;
+                const selected = classifySelection[report.id] || '';
+                const confPct  = report.ai_confidence != null
+                  ? Math.round((report.ai_confidence <= 1 ? report.ai_confidence * 100 : report.ai_confidence))
+                  : null;
+                const ageMs    = Date.now() - new Date(report.created_at).getTime();
+                const ageHrs   = Math.floor(ageMs / 3600000);
+                const ageLabel = ageHrs < 1 ? 'Just now' : ageHrs < 24 ? `${ageHrs}h ago` : `${Math.floor(ageHrs/24)}d ago`;
+
+                return (
+                  <div
+                    key={report.id}
+                    className="bg-white rounded-2xl border border-orange-200 shadow-sm overflow-hidden flex flex-col"
+                  >
+                    {/* Image */}
+                    <div className="relative h-44 bg-gray-100 overflow-hidden">
+                      {report.image_url ? (
+                        <img
+                          src={report.image_url}
+                          alt="Report"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <span className="material-symbols-outlined text-[48px] text-gray-300">image_not_supported</span>
+                        </div>
+                      )}
+                      {/* Low confidence badge */}
+                      <div className="absolute top-2 right-2 px-2.5 py-1 rounded-full bg-orange-500 text-white text-[11px] font-black shadow">
+                        ⚠️ LOW CONFIDENCE
+                      </div>
+                    </div>
+
+                    {/* Card body */}
+                    <div className="p-4 flex flex-col gap-3 flex-1">
+                      {/* Meta row */}
+                      <div className="flex items-center justify-between text-xs text-on-surface-variant">
+                        <span className="flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[14px]">location_on</span>
+                          {report.location_name || '—'}
+                        </span>
+                        <span>{ageLabel}</span>
+                      </div>
+
+                      {/* AI info */}
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">AI Label</span>
+                          <span className="text-xs font-bold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">
+                            {report.ai_label || 'Unknown'}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">AI Confidence</span>
+                          <span className={`text-xs font-black px-2 py-0.5 rounded-full ${
+                            confPct == null ? 'bg-gray-100 text-gray-500'
+                            : confPct < 40 ? 'bg-red-100 text-red-700'
+                            : 'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {confPct != null ? `${confPct}%` : 'N/A'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Reporter */}
+                      <p className="text-xs text-on-surface-variant truncate">
+                        <span className="font-semibold">Reporter:</span> {report.reporter_name || '—'}
+                      </p>
+
+                      {/* Classify dropdown */}
+                      <div className="mt-auto pt-2 border-t border-outline-variant flex flex-col gap-2">
+                        <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wide">
+                          Classify Issue *
+                        </label>
+                        <select
+                          id={`classify-${report.id}`}
+                          className="w-full border border-outline-variant rounded-xl px-3 py-2 text-sm font-semibold text-on-surface bg-surface focus:ring-2 focus:ring-primary outline-none"
+                          value={selected}
+                          onChange={e => setClassifySelection(prev => ({ ...prev, [report.id]: e.target.value }))}
+                          disabled={isSaving}
+                        >
+                          <option value="">— Select category —</option>
+                          <option value="Pothole">🕳️ Pothole</option>
+                          <option value="Garbage Overflow">🗑️ Garbage Overflow</option>
+                          <option value="Waterlogging">💧 Waterlogging</option>
+                          <option value="Streetlight Issue">💡 Streetlight Issue</option>
+                          <option value="Other">📋 Other</option>
+                        </select>
+
+                        <button
+                          id={`approve-${report.id}`}
+                          disabled={!selected || isSaving}
+                          onClick={() => handleClassifyReport(report)}
+                          className={`w-full py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2
+                            ${selected && !isSaving
+                              ? 'bg-primary text-white hover:opacity-90 hover:scale-[1.02] shadow-sm'
+                              : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
+                        >
+                          {isSaving ? (
+                            <>
+                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              Processing…
+                            </>
+                          ) : (
+                            <>
+                              <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                              Approve &amp; Add to Queue
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </main>
+      )}
+
       {/* Detailed Report Modal */}
+
       {selectedReport && (
         <div 
           className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-[9999] p-4 transition-all duration-300"

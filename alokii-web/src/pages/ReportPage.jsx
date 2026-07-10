@@ -80,6 +80,45 @@ export default function ReportPage() {
       const aiLabel = aiResult?.label || null;
       const aiConfidence = aiResult?.confidence || null;
 
+      // ─── REVIEW NEEDED GATE ────────────────────────────────────────────
+      // If AI is uncertain, quarantine the report immediately.
+      // It is EXCLUDED from the priority queue until an admin classifies it.
+      const INVALID_LABELS = ['unknown', 'other', null, undefined];
+      const needsReview =
+        (aiConfidence === null || aiConfidence === undefined || aiConfidence < 0.4) ||
+        INVALID_LABELS.includes(aiLabel);
+
+      if (needsReview) {
+        setSubmitStep('Saving report for admin review…');
+        const reviewPayload = {
+          reporter_name:  name.trim(),
+          reporter_phone: phone.trim(),
+          image_url:      imageUrl,
+          description:    description.trim() || null,
+          latitude:       location.latitude,
+          longitude:      location.longitude,
+          location_name:  `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`,
+          issue_type:     'Other',
+          status:         'REVIEW_NEEDED',
+          // Priority fields intentionally null — set only after admin classifies
+          priority_level: null,
+          priority_score: null,
+          ai_label:       aiLabel,
+          ai_confidence:  aiConfidence,
+          road_type:      null,
+          nearby_hospital_count: null,
+          nearby_police_count:   null,
+          nearby_shop_count:     null,
+          nearby_risk_score:     null,
+        };
+
+        const { error: reviewInsertError } = await supabase.from('reports').insert([reviewPayload]);
+        if (reviewInsertError) throw new Error(`Database error: ${reviewInsertError.message}`);
+        navigate('/success');
+        return;
+      }
+      // ─── END GATE ──────────────────────────────────────────────────────
+
       // Auto-classify issue type from AI result
       let detectedIssueType = 'Other';
       if (aiLabel === 'pothole') detectedIssueType = 'Pothole';
@@ -114,7 +153,7 @@ export default function ReportPage() {
         longitude: location.longitude,
         location_name: `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`,
         issue_type: detectedIssueType,
-        status: aiResult?.status || 'Pending',
+        status: 'Pending',
         priority_level: priorityInfo.priorityLevel,
         priority_score: priorityInfo.priorityScore,
         issue_severity_score: priorityInfo.severityScore,
@@ -141,6 +180,7 @@ export default function ReportPage() {
 
       // Step 4: Navigate to success
       navigate('/success');
+
     } catch (err) {
       console.error('Submission error:', err);
       setError(err.message || 'Submission failed. Please try again.');
