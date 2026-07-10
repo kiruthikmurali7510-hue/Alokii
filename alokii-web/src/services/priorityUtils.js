@@ -69,37 +69,49 @@ export function getTimeWaitingDisplay(createdAt) {
 }
 
 /**
- * Computes Priority Score and Priority Level dynamically
- * Priority Score = (AI Confidence × 0.25) + (Issue Severity × 0.30) + (Time Waiting × 0.25) + (Road Importance × 0.20)
- * 
- * @param {number} aiConfidence - Float from 0 to 1
- * @param {string} issueType - Pothole, Garbage Overflow, Other
- * @param {string} roadType - Main Road, Medium Road, Local Road, Unknown
- * @param {string|Date} createdAt 
+ * Computes Priority Score and Priority Level dynamically.
+ *
+ * Priority Score =
+ *   (Road Importance × 0.25) +
+ *   (Issue Severity  × 0.25) +
+ *   (Time Waiting    × 0.20) +
+ *   (Nearby Risk     × 0.20) +
+ *   (AI Confidence   × 0.10)
+ *
+ * @param {number} aiConfidence  - Float from 0 to 1 (or 0 to 100)
+ * @param {string} issueType     - Pothole, Garbage Overflow, Other
+ * @param {string} roadType      - Main Road, Medium Road, Local Road, Unknown
+ * @param {string|Date} createdAt
+ * @param {number} nearbyRiskScore - 0-60 from analyzeNearbyPlaces (default 30 if unknown)
  * @returns {object}
  */
-export function calculatePriority(aiConfidence, issueType, roadType, createdAt) {
-  // Normalize AI confidence to 0-100 range
+export function calculatePriority(aiConfidence, issueType, roadType, createdAt, nearbyRiskScore = 30) {
+  // Normalize AI confidence to 0-100
   let aiScore = 0;
   if (aiConfidence !== null && aiConfidence !== undefined) {
     aiScore = aiConfidence <= 1 ? aiConfidence * 100 : aiConfidence;
   }
 
   const severityScore = getIssueSeverityScore(issueType);
-  const roadScore = getRoadImportanceScore(roadType);
-  const timeScore = getTimeWaitingScore(createdAt);
+  const roadScore     = getRoadImportanceScore(roadType);
+  const timeScore     = getTimeWaitingScore(createdAt);
 
+  // Clamp nearbyRiskScore to 0-60 range for safety
+  const nearbyScore = Math.min(60, Math.max(0, nearbyRiskScore ?? 30));
+
+  // New weighted formula
   const priorityScore = Math.round(
-    (aiScore * 0.25) +
-    (severityScore * 0.30) +
-    (timeScore * 0.25) +
-    (roadScore * 0.20)
+    (roadScore    * 0.25) +
+    (severityScore * 0.25) +
+    (timeScore    * 0.20) +
+    (nearbyScore  * 0.20) +
+    (aiScore      * 0.10)
   );
 
   let priorityLevel = 'Low Priority';
-  if (priorityScore >= 75) {
+  if (priorityScore >= 70) {
     priorityLevel = 'High Priority';
-  } else if (priorityScore >= 50) {
+  } else if (priorityScore >= 45) {
     priorityLevel = 'Medium Priority';
   }
 
@@ -109,9 +121,11 @@ export function calculatePriority(aiConfidence, issueType, roadType, createdAt) 
     severityScore,
     roadScore,
     timeScore,
+    nearbyScore,
     timeDisplay: getTimeWaitingDisplay(createdAt)
   };
 }
+
 
 /**
  * Generates a human-friendly explanation of why a report has its priority level/score

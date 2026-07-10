@@ -6,6 +6,7 @@ import { runAIPipeline } from '../services/api';
 import { supabase } from '../services/supabaseClient';
 import { detectRoadType } from '../services/roadDetection';
 import { calculatePriority } from '../services/priorityUtils';
+import { getNearbyInsights } from '../services/nearbyInsights';
 import useGeolocation from '../hooks/useGeolocation';
 import './ReportPage.css';
 
@@ -88,36 +89,53 @@ export default function ReportPage() {
       setSubmitStep('Detecting road type…');
       const detectedRoadType = await detectRoadType(location.latitude, location.longitude);
 
-      // Calculate initial priority score and levels
+      // Fetch nearby places and compute risk score
+      setSubmitStep('Analysing nearby area…');
+      const nearbyData = await getNearbyInsights(location.latitude, location.longitude);
+      const nearbyRiskScore = nearbyData.riskScore;
+
+      // Calculate priority score using all factors
       const priorityInfo = calculatePriority(
         aiConfidence,
         detectedIssueType,
         detectedRoadType,
-        new Date()
+        new Date(),
+        nearbyRiskScore
       );
 
       // Step 3: Insert report into Supabase
       setSubmitStep('Saving report…');
-      const { error: insertError } = await supabase.from('reports').insert([
-        {
-          reporter_name: name.trim(),
-          reporter_phone: phone.trim(),
-          image_url: imageUrl,
-          description: description.trim() || null,
-          latitude: location.latitude,
-          longitude: location.longitude,
-          location_name: `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`,
-          issue_type: detectedIssueType,
-          status: aiResult?.status || 'Pending',
-          priority_level: priorityInfo.priorityLevel,
-          priority_score: priorityInfo.priorityScore,
-          issue_severity_score: priorityInfo.severityScore,
-          road_importance_score: priorityInfo.roadScore,
-          ai_label: aiLabel,
-          ai_confidence: aiConfidence,
-          road_type: detectedRoadType,
-        }
-      ]);
+      const reportPayload = {
+        reporter_name: name.trim(),
+        reporter_phone: phone.trim(),
+        image_url: imageUrl,
+        description: description.trim() || null,
+        latitude: location.latitude,
+        longitude: location.longitude,
+        location_name: `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`,
+        issue_type: detectedIssueType,
+        status: aiResult?.status || 'Pending',
+        priority_level: priorityInfo.priorityLevel,
+        priority_score: priorityInfo.priorityScore,
+        issue_severity_score: priorityInfo.severityScore,
+        road_importance_score: priorityInfo.roadScore,
+        ai_label: aiLabel,
+        ai_confidence: aiConfidence,
+        road_type: detectedRoadType,
+        nearby_hospital_count: nearbyData.hospitalCount,
+        nearby_police_count: nearbyData.policeCount,
+        nearby_shop_count: nearbyData.shopCount,
+        nearby_risk_score: nearbyRiskScore,
+      };
+
+      let { error: insertError } = await supabase.from('reports').insert([reportPayload]);
+
+      if (insertError && (insertError.message?.includes('column') || insertError.message?.includes('does not exist'))) {
+        console.warn('Supabase reports table lacks nearby columns. Retrying insert without them...');
+        const { nearby_hospital_count, nearby_police_count, nearby_shop_count, nearby_risk_score, ...fallbackPayload } = reportPayload;
+        const { error: fallbackError } = await supabase.from('reports').insert([fallbackPayload]);
+        insertError = fallbackError;
+      }
 
       if (insertError) throw new Error(`Database error: ${insertError.message}`);
 

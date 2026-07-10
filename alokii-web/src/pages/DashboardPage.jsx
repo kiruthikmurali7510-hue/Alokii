@@ -32,6 +32,8 @@ export default function DashboardPage() {
   const itemsPerPage = 10;
 
   const navigate = useNavigate();
+  const [loadingInsights, setLoadingInsights] = useState(false);
+  const [insightsData, setInsightsData] = useState(null);
 
   // Watch tab changes to collapse stats in map mode
   useEffect(() => {
@@ -140,7 +142,7 @@ export default function DashboardPage() {
   const filteredReports = useMemo(() => {
     const enriched = reports.map(r => {
       // Recalculate priority dynamically in real-time
-      const prio = calculatePriority(r.ai_confidence, r.issue_type, r.road_type, r.created_at);
+      const prio = calculatePriority(r.ai_confidence, r.issue_type, r.road_type, r.created_at, r.nearby_risk_score);
       return {
         ...r,
         // Override with dynamically computed values
@@ -149,7 +151,8 @@ export default function DashboardPage() {
         time_score: prio.timeScore,
         time_display: prio.timeDisplay,
         severity_score: prio.severityScore,
-        road_score: prio.roadScore
+        road_score: prio.roadScore,
+        nearby_risk_score: prio.nearbyScore
       };
     });
 
@@ -227,6 +230,68 @@ export default function DashboardPage() {
   const handleMarkerClick = useCallback((report) => {
     setSelectedReport(report);
   }, []);
+
+  // Dynamic Nearby Insights Fetcher for Details Modal
+  useEffect(() => {
+    if (!selectedReport) {
+      setInsightsData(null);
+      setLoadingInsights(false);
+      return;
+    }
+
+    const hasStoredInsights = 
+      selectedReport.nearby_risk_score !== null && 
+      selectedReport.nearby_risk_score !== undefined;
+
+    if (hasStoredInsights) {
+      setInsightsData({
+        hospitalCount: selectedReport.nearby_hospital_count || 0,
+        policeCount: selectedReport.nearby_police_count || 0,
+        shopCount: selectedReport.nearby_shop_count || 0,
+        riskScore: selectedReport.nearby_risk_score || 0
+      });
+      setLoadingInsights(false);
+    } else {
+      setLoadingInsights(true);
+      import('../services/nearbyInsights').then(({ getNearbyInsights }) => {
+        getNearbyInsights(selectedReport.latitude, selectedReport.longitude)
+          .then(data => {
+            setInsightsData(data);
+            setLoadingInsights(false);
+            // Update the reports state locally so that priority calculations and counts are updated
+            setReports(prev => prev.map(r => r.id === selectedReport.id ? {
+              ...r,
+              nearby_hospital_count: data.hospitalCount,
+              nearby_police_count: data.policeCount,
+              nearby_shop_count: data.shopCount,
+              nearby_risk_score: data.riskScore
+            } : r));
+            setSelectedReport(prev => {
+              if (prev && prev.id === selectedReport.id) {
+                return {
+                  ...prev,
+                  nearby_hospital_count: data.hospitalCount,
+                  nearby_police_count: data.policeCount,
+                  nearby_shop_count: data.shopCount,
+                  nearby_risk_score: data.riskScore
+                };
+              }
+              return prev;
+            });
+          })
+          .catch(err => {
+            console.error('Failed to load dynamic nearby insights:', err);
+            setInsightsData({
+              hospitalCount: 0,
+              policeCount: 0,
+              shopCount: 0,
+              riskScore: 30
+            });
+            setLoadingInsights(false);
+          });
+      });
+    }
+  }, [selectedReport]);
 
   // Paginated subset
   const totalFiltered = filteredReports.length;
@@ -964,6 +1029,63 @@ export default function DashboardPage() {
                   </div>
                 );
               })()}
+
+              {/* AI Insights (Geoapify Places API) */}
+              <div className="flex flex-col gap-3 bg-slate-50 border border-slate-200 p-5 rounded-2xl shadow-sm">
+                <span className="text-xs font-extrabold uppercase text-primary tracking-wider flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[16px]">location_on</span>
+                  AI Insights (1km Radius)
+                </span>
+                
+                {loadingInsights ? (
+                  <div className="flex items-center gap-2 py-2 text-xs text-outline font-medium">
+                    <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    Analyzing nearby public services and infrastructure...
+                  </div>
+                ) : insightsData ? (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
+                    <div className="flex flex-col bg-white p-3 rounded-xl border border-slate-100 shadow-2xs">
+                      <span className="text-[10px] uppercase font-bold text-outline">Hospitals Nearby</span>
+                      <span className="text-sm font-extrabold text-on-surface mt-1 flex items-center gap-1">
+                        🏥 {insightsData.hospitalCount}
+                      </span>
+                    </div>
+                    
+                    <div className="flex flex-col bg-white p-3 rounded-xl border border-slate-100 shadow-2xs">
+                      <span className="text-[10px] uppercase font-bold text-outline">Police Nearby</span>
+                      <span className="text-sm font-extrabold text-on-surface mt-1 flex items-center gap-1">
+                        👮 {insightsData.policeCount}
+                      </span>
+                    </div>
+                    
+                    <div className="flex flex-col bg-white p-3 rounded-xl border border-slate-100 shadow-2xs">
+                      <span className="text-[10px] uppercase font-bold text-outline">Shops Nearby</span>
+                      <span className="text-sm font-extrabold text-on-surface mt-1 flex items-center gap-1">
+                        🛍️ {insightsData.shopCount}
+                      </span>
+                    </div>
+                    
+                    <div className="flex flex-col bg-white p-3 rounded-xl border border-slate-100 shadow-2xs">
+                      <span className="text-[10px] uppercase font-bold text-outline">Risk Level</span>
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-md mt-1 self-start ${
+                        insightsData.riskScore >= 40
+                          ? 'bg-red-100 text-red-700'
+                          : insightsData.riskScore >= 20
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-green-100 text-green-700'
+                      }`}>
+                        {insightsData.riskScore >= 40 
+                          ? 'HIGH' 
+                          : insightsData.riskScore >= 20 
+                            ? 'MEDIUM' 
+                            : 'LOW'}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-outline">No nearby insight data available.</p>
+                )}
+              </div>
 
               {selectedReport.description && (
                 <div className="flex flex-col gap-1.5">
