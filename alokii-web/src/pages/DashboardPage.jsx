@@ -201,6 +201,7 @@ export default function DashboardPage() {
       }
       // 5. Priority Level Filter
       if (selectedPriorityLevel !== 'All') {
+        // priority_level is dynamically computed as 'High Priority', 'Medium Priority', 'Low Priority'
         if ((r.priority_level || '').toLowerCase() !== selectedPriorityLevel.toLowerCase()) {
           return false;
         }
@@ -502,10 +503,9 @@ export default function DashboardPage() {
                       onChange={(e) => setSelectedPriorityLevel(e.target.value)}
                     >
                       <option value="All">All Levels</option>
-                      <option value="Critical">🔴 Critical</option>
-                      <option value="High">🟠 High</option>
-                      <option value="Medium">🟡 Medium</option>
-                      <option value="Low">🟢 Low</option>
+                      <option value="High Priority">🔴 High Priority</option>
+                      <option value="Medium Priority">🟡 Medium Priority</option>
+                      <option value="Low Priority">🟢 Low Priority</option>
                     </select>
                   </div>
 
