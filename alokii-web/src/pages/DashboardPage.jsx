@@ -357,6 +357,21 @@ export default function DashboardPage() {
     if (!selectedCategory) return;
     setClassifyingId(report.id);
     try {
+      if (selectedCategory === 'Unrelated') {
+        // Delete flow
+        const { error: deleteError } = await supabase
+          .from('reports')
+          .delete()
+          .eq('id', report.id);
+
+        if (deleteError) throw new Error(deleteError.message);
+
+        // Remove locally
+        setReports(prev => prev.filter(r => r.id !== report.id));
+        setClassifySelection(prev => { const n = { ...prev }; delete n[report.id]; return n; });
+        return;
+      }
+
       // 1. Fetch road type + nearby insights (may use session cache)
       const [{ detectRoadType }, { getNearbyInsights }, { calculatePriority: calcPrio }] = await Promise.all([
         import('../services/roadDetection'),
@@ -1093,9 +1108,9 @@ export default function DashboardPage() {
                           <option value="">— Select category —</option>
                           <option value="Pothole">🕳️ Pothole</option>
                           <option value="Garbage Overflow">🗑️ Garbage Overflow</option>
-                          <option value="Waterlogging">💧 Waterlogging</option>
                           <option value="Streetlight Issue">💡 Streetlight Issue</option>
                           <option value="Other">📋 Other</option>
+                          <option value="Unrelated">🚫 Unrelated</option>
                         </select>
 
                         <button
@@ -1103,14 +1118,22 @@ export default function DashboardPage() {
                           disabled={!selected || isSaving}
                           onClick={() => handleClassifyReport(report)}
                           className={`w-full py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2
-                            ${selected && !isSaving
-                              ? 'bg-primary text-white hover:opacity-90 hover:scale-[1.02] shadow-sm'
-                              : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
+                            ${!selected || isSaving
+                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                              : selected === 'Unrelated'
+                                ? 'bg-red-600 text-white hover:bg-red-700 hover:scale-[1.02] shadow-sm'
+                                : 'bg-primary text-white hover:opacity-90 hover:scale-[1.02] shadow-sm'
+                            }`}
                         >
                           {isSaving ? (
                             <>
                               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                               Processing…
+                            </>
+                          ) : selected === 'Unrelated' ? (
+                            <>
+                              <span className="material-symbols-outlined text-[16px]">delete</span>
+                              Delete Entry
                             </>
                           ) : (
                             <>
