@@ -1031,13 +1031,17 @@ export default function DashboardPage() {
                     key={report.id}
                     className="bg-white rounded-2xl border border-orange-200 shadow-sm overflow-hidden flex flex-col"
                   >
-                    {/* Image */}
-                    <div className="relative h-44 bg-gray-100 overflow-hidden">
+                    {/* Image — click to open detail modal */}
+                    <div
+                      className="relative h-44 bg-gray-100 overflow-hidden cursor-pointer group"
+                      onClick={() => setSelectedReport(report)}
+                      title="Click to view full details"
+                    >
                       {report.image_url ? (
                         <img
                           src={report.image_url}
                           alt="Report"
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
@@ -1047,6 +1051,13 @@ export default function DashboardPage() {
                       {/* Low confidence badge */}
                       <div className="absolute top-2 right-2 px-2.5 py-1 rounded-full bg-orange-500 text-white text-[11px] font-black shadow">
                         ⚠️ LOW CONFIDENCE
+                      </div>
+                      {/* Hover overlay */}
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all duration-300 flex items-center justify-center">
+                        <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-white text-xs font-bold flex items-center gap-1 bg-black/50 px-3 py-1.5 rounded-full">
+                          <span className="material-symbols-outlined text-[14px]">open_in_full</span>
+                          View Details
+                        </span>
                       </div>
                     </div>
 
@@ -1086,8 +1097,8 @@ export default function DashboardPage() {
                         <span className="font-semibold">Reporter:</span> {report.reporter_name || '—'}
                       </p>
 
-                      {/* Classify dropdown */}
-                      <div className="mt-auto pt-2 border-t border-outline-variant flex flex-col gap-2">
+                      {/* Classify dropdown — stop propagation so it doesn't open the modal */}
+                      <div className="mt-auto pt-2 border-t border-outline-variant flex flex-col gap-2" onClick={e => e.stopPropagation()}>
                         <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wide">
                           Classify Issue *
                         </label>
