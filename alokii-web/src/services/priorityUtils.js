@@ -136,7 +136,7 @@ export function calculatePriority(aiConfidence, issueType, roadType, createdAt, 
  * @param {string} timeDisplay 
  * @returns {string}
  */
-export function getPriorityExplanation(priorityLevel, aiConfidence, issueType, roadType, timeDisplay) {
+export function getPriorityExplanation(priorityLevel, aiConfidence, issueType, roadType, timeDisplay, hospitalCount = null, policeCount = null, shopCount = null) {
   const levelText = priorityLevel.replace(' Priority', '').toLowerCase(); // high, medium, low
   const issueText = (issueType || 'civic issue').toLowerCase();
   
@@ -165,5 +165,20 @@ export function getPriorityExplanation(priorityLevel, aiConfidence, issueType, r
   }
 
   // Combine reasons grammatically
-  return `${priorityLevel} because this ${issueText} ${reasons[0]}, ${reasons[1]}, and ${reasons[2]}.`;
+  let explanation = `${priorityLevel} because this ${issueText} ${reasons[0]}, ${reasons[1]}, and ${reasons[2]}.`;
+
+  if (hospitalCount !== null && hospitalCount !== undefined && policeCount !== null && policeCount !== undefined && shopCount !== null && shopCount !== undefined) {
+    const facilities = [];
+    if (hospitalCount > 0) facilities.push(`${hospitalCount} medical facilit${hospitalCount === 1 ? 'y' : 'ies'}`);
+    if (policeCount > 0) facilities.push(`${policeCount} police station${policeCount === 1 ? '' : 's'}`);
+    if (shopCount > 0) facilities.push(`${shopCount} food/shop place${shopCount === 1 ? '' : 's'}`);
+
+    if (facilities.length > 0) {
+      explanation += ` Factual analysis confirms there are ${facilities.join(', ')} within a 1km radius of this location.`;
+    } else {
+      explanation += ` Factual analysis confirms no critical services (medical, police, or food/shop services) are within a 1km radius of this location.`;
+    }
+  }
+
+  return explanation;
 }

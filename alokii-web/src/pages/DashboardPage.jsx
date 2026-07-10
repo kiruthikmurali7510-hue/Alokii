@@ -433,6 +433,57 @@ export default function DashboardPage() {
     } finally {
       setClassifyingId(null);
     }
+  const [retryingRoadId, setRetryingRoadId] = useState(null);
+
+  const handleRetryRoadDetection = async (report) => {
+    if (!report) return;
+    setRetryingRoadId(report.id);
+    try {
+      const { detectRoadType } = await import('../services/roadDetection');
+      const roadType = await detectRoadType(report.latitude, report.longitude);
+      
+      // Recalculate priority
+      const priorityInfo = calculatePriority(
+        report.ai_confidence,
+        report.issue_type,
+        roadType,
+        report.created_at,
+        report.nearby_risk_score
+      );
+
+      // Persist to Supabase
+      const { error: updateError } = await supabase
+        .from('reports')
+        .update({
+          road_type: roadType,
+          priority_score: priorityInfo.priorityScore,
+          priority_level: priorityInfo.priorityLevel,
+          road_importance_score: priorityInfo.roadScore,
+        })
+        .eq('id', report.id);
+
+      if (updateError) throw new Error(updateError.message);
+
+      // Update state
+      const updatedReport = {
+        ...report,
+        road_type: roadType,
+        priority_score: priorityInfo.priorityScore,
+        priority_level: priorityInfo.priorityLevel,
+        road_importance_score: priorityInfo.roadScore,
+        severity_score: priorityInfo.severityScore,
+        time_score: priorityInfo.timeScore,
+        time_display: priorityInfo.timeDisplay,
+      };
+
+      setReports(prev => prev.map(r => r.id === report.id ? updatedReport : r));
+      setSelectedReport(updatedReport);
+    } catch (err) {
+      console.error('Road retry error:', err);
+      alert('Failed to retry road detection: ' + err.message);
+    } finally {
+      setRetryingRoadId(null);
+    }
   };
 
   const getPriorityBadgeClass = (level) => {
@@ -1250,8 +1301,27 @@ export default function DashboardPage() {
                   <span className="text-sm font-semibold text-on-surface">
                     Latitude: {selectedReport.latitude?.toFixed(6)} | Longitude: {selectedReport.longitude?.toFixed(6)}
                   </span>
-                  <span className="text-sm text-on-surface mt-1">
+                  <span className="text-sm text-on-surface mt-1 flex items-center gap-2">
                     <span className="font-bold">Road Type:</span> {selectedReport.road_type || 'Unknown'}
+                    {(!selectedReport.road_type || selectedReport.road_type.toLowerCase() === 'unknown') && (
+                      <button
+                        onClick={() => handleRetryRoadDetection(selectedReport)}
+                        disabled={retryingRoadId === selectedReport.id}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-primary hover:text-primary-hover bg-primary/5 hover:bg-primary/10 rounded-lg transition-all"
+                      >
+                        {retryingRoadId === selectedReport.id ? (
+                          <>
+                            <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                            Detecting...
+                          </>
+                        ) : (
+                          <>
+                            <span className="material-symbols-outlined text-[14px]">sync</span>
+                            Retry Detection
+                          </>
+                        )}
+                      </button>
+                    )}
                   </span>
                 </div>
               </div>
@@ -1309,7 +1379,10 @@ export default function DashboardPage() {
                         selectedReport.ai_confidence,
                         selectedReport.issue_type,
                         selectedReport.road_type,
-                        selectedReport.time_display || '0 mins'
+                        selectedReport.time_display || '0 mins',
+                        selectedReport.nearby_hospital_count,
+                        selectedReport.nearby_police_count,
+                        selectedReport.nearby_shop_count
                       )}"
                     </p>
                   </div>
