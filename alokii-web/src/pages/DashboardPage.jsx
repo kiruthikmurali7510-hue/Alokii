@@ -516,6 +516,24 @@ export default function DashboardPage() {
                   >
                     Reset Filters
                   </button>
+
+                  {/* Spacer + Report count & Smart Map shortcut */}
+                  <div className="ml-auto flex items-center gap-2">
+                    {/* Report count badge */}
+                    <span className="flex items-center gap-1.5 bg-primary/10 text-primary text-xs font-bold px-3 py-1.5 rounded-xl border border-primary/20 select-none">
+                      <span className="material-symbols-outlined text-[14px]">bar_chart</span>
+                      {totalFiltered} report{totalFiltered !== 1 ? 's' : ''}
+                    </span>
+
+                    {/* See in Smart Map button */}
+                    <button
+                      className="flex items-center gap-1.5 bg-primary text-white text-xs font-bold px-4 py-1.5 rounded-xl shadow hover:bg-primary/90 hover:scale-105 active:scale-95 transition-all duration-150 focus:ring-2 focus:ring-primary/40"
+                      onClick={() => setActiveTab('map')}
+                    >
+                      <span className="material-symbols-outlined text-[14px]">map</span>
+                      See in Smart Map
+                    </button>
+                  </div>
                 </div>
 
                 {/* ── Full-width Table ── */}
