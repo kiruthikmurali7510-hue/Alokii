@@ -232,6 +232,8 @@ export default function DashboardPage() {
   }, []);
 
   // Dynamic Nearby Insights Fetcher for Details Modal
+  // Always fetch LIVE from Geoapify — never trust stale DB values
+  // (old reports may have been stored with wrong category queries that returned 0)
   useEffect(() => {
     if (!selectedReport) {
       setInsightsData(null);
@@ -239,59 +241,49 @@ export default function DashboardPage() {
       return;
     }
 
-    const hasStoredInsights = 
-      selectedReport.nearby_risk_score !== null && 
-      selectedReport.nearby_risk_score !== undefined;
-
-    if (hasStoredInsights) {
-      setInsightsData({
-        hospitalCount: selectedReport.nearby_hospital_count || 0,
-        policeCount: selectedReport.nearby_police_count || 0,
-        shopCount: selectedReport.nearby_shop_count || 0,
-        riskScore: selectedReport.nearby_risk_score || 0
-      });
+    // Skip re-fetch if coordinates are missing
+    if (!selectedReport.latitude || !selectedReport.longitude) {
+      setInsightsData({ hospitalCount: 0, policeCount: 0, shopCount: 0, riskScore: 30 });
       setLoadingInsights(false);
-    } else {
-      setLoadingInsights(true);
-      import('../services/nearbyInsights').then(({ getNearbyInsights }) => {
-        getNearbyInsights(selectedReport.latitude, selectedReport.longitude)
-          .then(data => {
-            setInsightsData(data);
-            setLoadingInsights(false);
-            // Update the reports state locally so that priority calculations and counts are updated
-            setReports(prev => prev.map(r => r.id === selectedReport.id ? {
-              ...r,
-              nearby_hospital_count: data.hospitalCount,
-              nearby_police_count: data.policeCount,
-              nearby_shop_count: data.shopCount,
-              nearby_risk_score: data.riskScore
-            } : r));
-            setSelectedReport(prev => {
-              if (prev && prev.id === selectedReport.id) {
-                return {
-                  ...prev,
-                  nearby_hospital_count: data.hospitalCount,
-                  nearby_police_count: data.policeCount,
-                  nearby_shop_count: data.shopCount,
-                  nearby_risk_score: data.riskScore
-                };
-              }
-              return prev;
-            });
-          })
-          .catch(err => {
-            console.error('Failed to load dynamic nearby insights:', err);
-            setInsightsData({
-              hospitalCount: 0,
-              policeCount: 0,
-              shopCount: 0,
-              riskScore: 30
-            });
-            setLoadingInsights(false);
-          });
-      });
+      return;
     }
-  }, [selectedReport]);
+
+    setLoadingInsights(true);
+    setInsightsData(null);
+
+    import('../services/nearbyInsights').then(({ getNearbyInsights }) => {
+      getNearbyInsights(selectedReport.latitude, selectedReport.longitude)
+        .then(data => {
+          setInsightsData(data);
+          setLoadingInsights(false);
+          // Patch local state so priority score reflects fresh data
+          setReports(prev => prev.map(r => r.id === selectedReport.id ? {
+            ...r,
+            nearby_hospital_count: data.hospitalCount,
+            nearby_police_count: data.policeCount,
+            nearby_shop_count: data.shopCount,
+            nearby_risk_score: data.riskScore
+          } : r));
+          setSelectedReport(prev => {
+            if (prev && prev.id === selectedReport.id) {
+              return {
+                ...prev,
+                nearby_hospital_count: data.hospitalCount,
+                nearby_police_count: data.policeCount,
+                nearby_shop_count: data.shopCount,
+                nearby_risk_score: data.riskScore
+              };
+            }
+            return prev;
+          });
+        })
+        .catch(err => {
+          console.error('Failed to load dynamic nearby insights:', err);
+          setInsightsData({ hospitalCount: 0, policeCount: 0, shopCount: 0, riskScore: 30 });
+          setLoadingInsights(false);
+        });
+    });
+  }, [selectedReport?.id]);
 
   // Paginated subset
   const totalFiltered = filteredReports.length;
