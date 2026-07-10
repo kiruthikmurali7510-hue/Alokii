@@ -433,6 +433,8 @@ export default function DashboardPage() {
     } finally {
       setClassifyingId(null);
     }
+  };
+
   const [retryingRoadId, setRetryingRoadId] = useState(null);
 
   const handleRetryRoadDetection = async (report) => {
