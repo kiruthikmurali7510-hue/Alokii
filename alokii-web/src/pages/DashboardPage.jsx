@@ -25,6 +25,7 @@ export default function DashboardPage() {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState('All');
   const [selectedTimeframe, setSelectedTimeframe] = useState('All');
+  const [selectedPriorityLevel, setSelectedPriorityLevel] = useState('All');
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -198,9 +199,15 @@ export default function DashboardPage() {
           if (now - reportDate > 30 * 24 * 60 * 60 * 1000) return false;
         }
       }
+      // 5. Priority Level Filter
+      if (selectedPriorityLevel !== 'All') {
+        if ((r.priority_level || '').toLowerCase() !== selectedPriorityLevel.toLowerCase()) {
+          return false;
+        }
+      }
       return true;
     });
-  }, [reports, searchQuery, selectedCategory, selectedStatus, selectedTimeframe]);
+  }, [reports, searchQuery, selectedCategory, selectedStatus, selectedTimeframe, selectedPriorityLevel]);
 
   // Memoize map center coordinates to stabilize map references
   const mapCenter = useMemo(() => {
@@ -228,12 +235,13 @@ export default function DashboardPage() {
   // Reset pagination on filter update
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedCategory, selectedStatus, selectedTimeframe]);
+  }, [searchQuery, selectedCategory, selectedStatus, selectedTimeframe, selectedPriorityLevel]);
 
   const resetFilters = () => {
     setSelectedCategory('All');
     setSelectedStatus('All');
     setSelectedTimeframe('All');
+    setSelectedPriorityLevel('All');
     setSearchQuery('');
   };
 
@@ -482,6 +490,22 @@ export default function DashboardPage() {
                       <option value="24h">Last 24 Hours</option>
                       <option value="7d">Last 7 Days</option>
                       <option value="30d">Last 30 Days</option>
+                    </select>
+                  </div>
+
+                  {/* Priority Level */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] text-outline font-bold uppercase tracking-wider">Priority Level</label>
+                    <select
+                      className="bg-surface-container-low border border-outline-variant rounded-xl px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-primary font-medium transition-colors duration-200 ease-in-out hover:bg-surface-container-high"
+                      value={selectedPriorityLevel}
+                      onChange={(e) => setSelectedPriorityLevel(e.target.value)}
+                    >
+                      <option value="All">All Levels</option>
+                      <option value="Critical">🔴 Critical</option>
+                      <option value="High">🟠 High</option>
+                      <option value="Medium">🟡 Medium</option>
+                      <option value="Low">🟢 Low</option>
                     </select>
                   </div>
 
