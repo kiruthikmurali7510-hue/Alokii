@@ -358,17 +358,10 @@ export default function DashboardPage() {
     setClassifyingId(report.id);
     try {
       if (selectedCategory === 'Unrelated') {
-        // Delete flow
-        const { error: deleteError } = await supabase
-          .from('reports')
-          .delete()
-          .eq('id', report.id);
-
-        if (deleteError) throw new Error(deleteError.message);
-
-        // Remove locally
-        setReports(prev => prev.filter(r => r.id !== report.id));
-        setClassifySelection(prev => { const n = { ...prev }; delete n[report.id]; return n; });
+        // Hand off to the existing confirm→undo→delete flow
+        // (reuses the same confirmation modal + 15s undo toast used for main queue deletions)
+        setConfirmDeleteId(report.id);
+        setClassifyingId(null);
         return;
       }
 
@@ -1116,7 +1109,14 @@ export default function DashboardPage() {
                         <button
                           id={`approve-${report.id}`}
                           disabled={!selected || isSaving}
-                          onClick={() => handleClassifyReport(report)}
+                          onClick={() => {
+                            if (selected === 'Unrelated') {
+                              // Open the existing confirm dialog — undo toast will follow
+                              setConfirmDeleteId(report.id);
+                            } else {
+                              handleClassifyReport(report);
+                            }
+                          }}
                           className={`w-full py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2
                             ${!selected || isSaving
                               ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
