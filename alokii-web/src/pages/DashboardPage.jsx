@@ -1362,8 +1362,22 @@ export default function DashboardPage() {
                       </div>
                       <div className="flex flex-col">
                         <span className="text-[10px] uppercase font-bold text-outline">Road Importance</span>
-                        <span className="text-sm font-semibold text-on-surface mt-0.5">
+                        <span className="text-sm font-semibold text-on-surface mt-0.5 flex items-center gap-1.5">
                           {selectedReport.road_type || 'Unknown'}
+                          {(!selectedReport.road_type || selectedReport.road_type.toLowerCase() === 'unknown') && (
+                            <button
+                              onClick={() => handleRetryRoadDetection(selectedReport)}
+                              disabled={retryingRoadId === selectedReport.id}
+                              className="inline-flex items-center justify-center w-5 h-5 text-primary hover:text-primary-hover bg-primary/5 hover:bg-primary/10 rounded transition-all"
+                              title="Retry Road Detection"
+                            >
+                              {retryingRoadId === selectedReport.id ? (
+                                <div className="w-2.5 h-2.5 border border-primary border-t-transparent rounded-full animate-spin" />
+                              ) : (
+                                <span className="material-symbols-outlined text-[13px] font-bold">sync</span>
+                              )}
+                            </button>
+                          )}
                         </span>
                       </div>
                       <div className="flex flex-col">
