@@ -100,16 +100,15 @@ export default function ReportPage() {
           location_name:  `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`,
           issue_type:     'Other',
           status:         'REVIEW_NEEDED',
-          // Priority fields intentionally null — set only after admin classifies
-          priority_level: null,
-          priority_score: null,
+          priority_level: 'Low Priority',
+          priority_score: 0,
           ai_label:       aiLabel,
           ai_confidence:  aiConfidence,
-          road_type:      null,
-          nearby_hospital_count: null,
-          nearby_police_count:   null,
-          nearby_shop_count:     null,
-          nearby_risk_score:     null,
+          road_type:      'Unknown',
+          nearby_hospital_count: 0,
+          nearby_police_count:   0,
+          nearby_shop_count:     0,
+          nearby_risk_score:     0,
         };
 
         const { error: reviewInsertError } = await supabase.from('reports').insert([reviewPayload]);
