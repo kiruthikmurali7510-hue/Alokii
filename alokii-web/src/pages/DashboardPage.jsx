@@ -1,4 +1,4 @@
-// src/pages/DashboardPage.jsx
+// src/pages/DashboardPage.jsx - Live Update Deployment Trigger
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
