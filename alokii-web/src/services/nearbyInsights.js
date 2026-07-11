@@ -8,12 +8,16 @@
 // clinics, nursing homes, dental, pharmacy etc. are all counted
 // under "healthcare" — not just OSM-tagged hospitals.
 
-const GEOAPIFY_API_KEY = 'b955afbe33674cbabe625e26105fd268';
+const GEOAPIFY_API_KEYS = [
+  'b955afbe33674cbabe625e26105fd268', // Primary Key
+  '70e5add365234079abd4dfa705dfae78'  // Fallback Key
+];
 const RADIUS_METERS    = 2000; // 2 km radius (wider net for rural areas)
 const PLACE_LIMIT      = 50;
 
 /**
  * Fetches nearby places for a SINGLE category string from Geoapify.
+ * Fallbacks to secondary API key if primary key hits limits (402, 403, 429).
  * Returns [] on any error — never throws.
  * @param {number} lat
  * @param {number} lng
@@ -21,35 +25,48 @@ const PLACE_LIMIT      = 50;
  * @returns {Promise<Array>} GeoJSON feature array
  */
 async function fetchCategory(lat, lng, category) {
-  try {
-    const url =
-      `https://api.geoapify.com/v2/places` +
-      `?categories=${encodeURIComponent(category)}` +
-      `&filter=circle:${lng},${lat},${RADIUS_METERS}` +
-      `&limit=${PLACE_LIMIT}` +
-      `&apiKey=${GEOAPIFY_API_KEY}`;
+  for (let i = 0; i < GEOAPIFY_API_KEYS.length; i++) {
+    const apiKey = GEOAPIFY_API_KEYS[i];
+    try {
+      const url =
+        `https://api.geoapify.com/v2/places` +
+        `?categories=${encodeURIComponent(category)}` +
+        `&filter=circle:${lng},${lat},${RADIUS_METERS}` +
+        `&limit=${PLACE_LIMIT}` +
+        `&apiKey=${apiKey}`;
 
-    const controller = new AbortController();
-    const timeout    = setTimeout(() => controller.abort(), 10000);
+      const controller = new AbortController();
+      const timeout    = setTimeout(() => controller.abort(), 10000);
 
-    const response = await fetch(url, { signal: controller.signal });
-    clearTimeout(timeout);
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
 
-    if (!response.ok) {
-      console.warn(`[NearbyInsights] Geoapify ${category} returned HTTP ${response.status}`);
+      // Quota exceeded / Limit reached status codes: 402 (Payment Required), 403 (Forbidden), 429 (Too Many Requests)
+      if (response.status === 402 || response.status === 403 || response.status === 429) {
+        console.warn(`[NearbyInsights] API key index ${i} limit reached (${response.status}). Trying next key...`);
+        continue;
+      }
+
+      if (!response.ok) {
+        console.warn(`[NearbyInsights] Geoapify ${category} returned HTTP ${response.status}`);
+        return [];
+      }
+
+      const data = await response.json();
+      return Array.isArray(data.features) ? data.features : [];
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        console.warn(`[NearbyInsights] Geoapify ${category} request timed out.`);
+      } else {
+        console.warn(`[NearbyInsights] Fetch failed for ${category} with key index ${i}:`, err.message);
+      }
+      if (i < GEOAPIFY_API_KEYS.length - 1) {
+        continue; // Fallback to next key on network error
+      }
       return [];
     }
-
-    const data = await response.json();
-    return Array.isArray(data.features) ? data.features : [];
-  } catch (err) {
-    if (err.name === 'AbortError') {
-      console.warn(`[NearbyInsights] Geoapify ${category} request timed out.`);
-    } else {
-      console.warn(`[NearbyInsights] Fetch failed for ${category}:`, err.message);
-    }
-    return [];
   }
+  return [];
 }
 
 /**

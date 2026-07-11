@@ -272,44 +272,33 @@ export default function DashboardPage() {
       return;
     }
 
-    // 🌐 Cache MISS — fetch live then store in cache
-    setLoadingInsights(true);
-    setInsightsData(null);
+    // Check if report has proper, valid fetched data in the DB
+    const alreadyFetched =
+      selectedReport.nearby_hospital_count !== null &&
+      selectedReport.nearby_hospital_count !== undefined &&
+      (
+        selectedReport.nearby_hospital_count > 0 ||
+        selectedReport.nearby_police_count > 0 ||
+        selectedReport.nearby_shop_count > 0 ||
+        (selectedReport.admin_notes || '').includes('[insights_fetched]')
+      );
 
-    import('../services/nearbyInsights').then(({ getNearbyInsights }) => {
-      getNearbyInsights(selectedReport.latitude, selectedReport.longitude)
-        .then(data => {
-          // Store in session cache so re-opens are instant
-          insightsCacheRef.current.set(selectedReport.id, data);
-          setInsightsData(data);
-          setLoadingInsights(false);
-          // Patch local report state so priority score reflects fresh data
-          setReports(prev => prev.map(r => r.id === selectedReport.id ? {
-            ...r,
-            nearby_hospital_count: data.hospitalCount,
-            nearby_police_count: data.policeCount,
-            nearby_shop_count: data.shopCount,
-            nearby_risk_score: data.riskScore
-          } : r));
-          setSelectedReport(prev => {
-            if (prev && prev.id === selectedReport.id) {
-              return {
-                ...prev,
-                nearby_hospital_count: data.hospitalCount,
-                nearby_police_count: data.policeCount,
-                nearby_shop_count: data.shopCount,
-                nearby_risk_score: data.riskScore
-              };
-            }
-            return prev;
-          });
-        })
-        .catch(err => {
-          console.error('Failed to load dynamic nearby insights:', err);
-          setInsightsData({ hospitalCount: 0, policeCount: 0, shopCount: 0, riskScore: 30 });
-          setLoadingInsights(false);
-        });
-    });
+    if (alreadyFetched) {
+      const data = {
+        hospitalCount: selectedReport.nearby_hospital_count || 0,
+        policeCount: selectedReport.nearby_police_count || 0,
+        shopCount: selectedReport.nearby_shop_count || 0,
+        riskScore: selectedReport.nearby_risk_score ?? 30
+      };
+      insightsCacheRef.current.set(selectedReport.id, data);
+      setInsightsData(data);
+      setLoadingInsights(false);
+      return;
+    }
+
+    // If not fetched, set to null (will show the manual Fetch button)
+    setInsightsData(null);
+    setLoadingInsights(false);
   }, [selectedReport?.id]);
 
   // Paginated subset
@@ -382,6 +371,10 @@ export default function DashboardPage() {
       );
 
       // 2. Persist to Supabase
+      const notesMarker = '[insights_fetched]';
+      const cleanNotes = report.admin_notes || '';
+      const newNotes = cleanNotes.includes(notesMarker) ? cleanNotes : `${cleanNotes} ${notesMarker}`.trim();
+
       const { error: updateError } = await supabase
         .from('reports')
         .update({
@@ -397,6 +390,7 @@ export default function DashboardPage() {
           nearby_police_count:   nearby.policeCount,
           nearby_shop_count:     nearby.shopCount,
           nearby_risk_score:     nearby.riskScore,
+          admin_notes:           newNotes,
         })
         .eq('id', report.id);
 
@@ -415,6 +409,7 @@ export default function DashboardPage() {
         nearby_police_count:   nearby.policeCount,
         nearby_shop_count:     nearby.shopCount,
         nearby_risk_score:     nearby.riskScore,
+        admin_notes:           newNotes,
       } : r));
 
       // Store fresh insights in session cache
@@ -485,6 +480,73 @@ export default function DashboardPage() {
       alert('Failed to retry road detection: ' + err.message);
     } finally {
       setRetryingRoadId(null);
+    }
+  };
+
+  const handleFetchNearbyInsights = async (report) => {
+    if (!report || !report.latitude || !report.longitude) return;
+    setLoadingInsights(true);
+    try {
+      const { getNearbyInsights } = await import('../services/nearbyInsights');
+      const data = await getNearbyInsights(report.latitude, report.longitude);
+
+      // Recalculate priority based on new nearby risk score
+      const priorityInfo = calculatePriority(
+        report.ai_confidence,
+        report.issue_type,
+        report.road_type,
+        report.created_at,
+        data.riskScore
+      );
+
+      // Append fetched marker to admin_notes to handle true zeros on future reloads
+      const notesMarker = '[insights_fetched]';
+      const cleanNotes = report.admin_notes || '';
+      const newNotes = cleanNotes.includes(notesMarker) ? cleanNotes : `${cleanNotes} ${notesMarker}`.trim();
+
+      // Persist to Supabase
+      const { error: updateError } = await supabase
+        .from('reports')
+        .update({
+          nearby_hospital_count: data.hospitalCount,
+          nearby_police_count:   data.policeCount,
+          nearby_shop_count:     data.shopCount,
+          nearby_risk_score:     data.riskScore,
+          priority_score:        priorityInfo.priorityScore,
+          priority_level:        priorityInfo.priorityLevel,
+          admin_notes:           newNotes
+        })
+        .eq('id', report.id);
+
+      if (updateError) throw new Error(updateError.message);
+
+      const updatedReport = {
+        ...report,
+        nearby_hospital_count: data.hospitalCount,
+        nearby_police_count:   data.policeCount,
+        nearby_shop_count:     data.shopCount,
+        nearby_risk_score:     data.riskScore,
+        priority_score:        priorityInfo.priorityScore,
+        priority_level:        priorityInfo.priorityLevel,
+        admin_notes:           newNotes,
+        severity_score:        priorityInfo.severityScore,
+        road_score:            priorityInfo.roadScore,
+        time_score:            priorityInfo.timeScore,
+        time_display:          priorityInfo.timeDisplay,
+      };
+
+      // Store in session cache
+      insightsCacheRef.current.set(report.id, data);
+      
+      // Update local states
+      setReports(prev => prev.map(r => r.id === report.id ? updatedReport : r));
+      setSelectedReport(updatedReport);
+      setInsightsData(data);
+    } catch (err) {
+      console.error('Failed to load manual nearby insights:', err);
+      alert('Failed to load nearby insights: ' + err.message);
+    } finally {
+      setLoadingInsights(false);
     }
   };
 
@@ -1407,10 +1469,21 @@ export default function DashboardPage() {
 
               {/* AI Insights (Geoapify Places API) */}
               <div className="flex flex-col gap-3 bg-slate-50 border border-slate-200 p-5 rounded-2xl shadow-sm">
-                <span className="text-xs font-extrabold uppercase text-primary tracking-wider flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-[16px]">location_on</span>
-                  AI Insights (1km Radius)
-                </span>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold uppercase text-primary tracking-wider flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[16px]">location_on</span>
+                    AI Insights (1km Radius)
+                  </span>
+                  {!loadingInsights && !insightsData && (
+                    <button
+                      onClick={() => handleFetchNearbyInsights(selectedReport)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-white bg-primary hover:bg-primary/90 rounded-lg shadow-sm transition-all hover:scale-[1.02] active:scale-95"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">explore</span>
+                      Fetch Insights
+                    </button>
+                  )}
+                </div>
                 
                 {loadingInsights ? (
                   <div className="flex items-center gap-2 py-2 text-xs text-outline font-medium">
@@ -1458,7 +1531,16 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 ) : (
-                  <p className="text-xs text-outline">No nearby insight data available.</p>
+                  <div className="flex flex-col items-center justify-center py-4 text-center">
+                    <p className="text-xs text-outline font-medium">Nearby place insights have not been fetched for this report yet.</p>
+                    <button
+                      onClick={() => handleFetchNearbyInsights(selectedReport)}
+                      className="mt-2 inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-primary hover:text-primary-hover bg-primary/5 hover:bg-primary/10 rounded-xl transition-all"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">explore</span>
+                      Get Location Insights
+                    </button>
+                  </div>
                 )}
               </div>
 
